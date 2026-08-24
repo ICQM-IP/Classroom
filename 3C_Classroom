@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>班級行為與計分管理系統</title>
+    <!-- 引入 SheetJS 函式庫 -->
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <style>
+        :root {
+            --primary: #4F46E5;
+            --primary-hover: #4338CA;
+            --success: #10B981;
+            --danger: #EF4444;
+            --bg-slate: #F8FAFC;
+            --text-main: #1E293B;
+            --text-muted: #64748B;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+        body { background-color: var(--bg-slate); color: var(--text-main); min-height: 100vh; }
+
+        /* Header & Nav */
+        header {
+            background: #ffffff; border-bottom: 1px solid #E2E8F0; padding: 1rem 2rem;
+            display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 10;
+        }
+        .logo { font-size: 1.25rem; font-weight: bold; display: flex; align-items: center; gap: 0.5rem; }
+        .sync-status { font-size: 0.8rem; color: var(--text-muted); display: flex; align-items: center; gap: 0.3rem; }
+        .sync-dot { width: 8px; height: 8px; border-radius: 50%; background-color: #CBD5E1; }
+        .sync-dot.active { background-color: var(--success); }
+
+        nav { display: flex; gap: 0.5rem; background: #F1F5F9; padding: 0.25rem; border-radius: 0.5rem; }
+        .nav-btn {
+            padding: 0.5rem 1rem; border: none; background: transparent; border-radius: 0.375rem;
+            font-weight: 600; color: var(--text-muted); cursor: pointer; transition: all 0.2s;
+        }
+        .nav-btn.active { background: #ffffff; color: var(--primary); box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+
+        /* Main Container */
+        .container { max-width: 1100px; margin: 1.5rem auto; padding: 0 1rem; }
+
+        /* Toolbar */
+        .toolbar {
+            display: flex; justify-content: space-between; align-items: center;
+            background: white; padding: 1rem; border-radius: 0.75rem; border: 1px solid #E2E8F0;
+            margin-bottom: 1.5rem; flex-wrap: wrap; gap: 0.75rem;
+        }
+        .btn-group { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+        .btn {
+            padding: 0.5rem 1rem; border: 1px solid transparent; border-radius: 0.5rem;
+            font-weight: 600; cursor: pointer; font-size: 0.9rem; transition: background 0.15s;
+            display: inline-flex; align-items: center; gap: 0.3rem;
+        }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: var(--primary-hover); }
+        .btn-success { background: var(--success); color: white; }
+        .btn-outline { background: white; border-color: #CBD5E1; color: var(--text-main); }
+        .btn-outline:hover { background: #F8FAFC; }
+        .btn-danger-link { background: transparent; border: none; color: var(--danger); cursor: pointer; font-size: 0.85rem; text-decoration: underline; }
+
+        /* Student Grid */
+        .student-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 1rem; }
+        .student-card {
+            background: white; border-radius: 0.75rem; padding: 1rem; text-align: center;
+            border: 2px solid #E2E8F0; cursor: pointer; transition: all 0.2s; position: relative;
+        }
+        .student-card:hover { border-color: #A5B4FC; transform: translateY(-2px); }
+        .student-card.selected { border-color: var(--primary); background-color: #EEF2FF; }
+        
+        .card-checkbox { position: absolute; top: 0.75rem; left: 0.75rem; width: 18px; height: 18px; cursor: pointer; }
+        .avatar { font-size: 2.8rem; margin-bottom: 0.25rem; }
+        .name { font-weight: 700; font-size: 1rem; margin-bottom: 0.5rem; }
+        
+        .pts-container { display: flex; justify-content: center; gap: 0.3rem; margin-bottom: 0.75rem; font-size: 0.8rem; font-weight: 700; }
+        .pt-badge { padding: 0.2rem 0.5rem; border-radius: 1rem; }
+        .curr-pt { background: #E0E7FF; color: var(--primary); }
+        .total-pt { background: #FEF3C7; color: #D97706; }
+
+        .quick-btns { display: flex; gap: 0.25rem; justify-content: center; }
+        .quick-btn { border: none; padding: 0.25rem 0.6rem; border-radius: 0.375rem; font-weight: bold; cursor: pointer; font-size: 0.85rem; }
+        .q-add { background: #D1FAE5; color: #047857; }
+        .q-sub { background: #FEE2E2; color: #B91C1C; }
+
+        /* Store & Roster Management */
+        .store-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 1rem; }
+        .store-card { background: white; border-radius: 0.75rem; padding: 1.25rem; border: 1px solid #E2E8F0; text-align: center; position: relative; }
+        .store-icon-select { font-size: 2.2rem; border: none; background: transparent; cursor: pointer; margin-bottom: 0.25rem; }
+        
+        .roster-card { background: white; border: 1px solid #E2E8F0; border-radius: 0.5rem; padding: 1rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.5rem; }
+        .roster-info { display: flex; align-items: center; gap: 1rem; flex-grow: 1; }
+
+        .del-btn { position: absolute; top: 8px; right: 8px; background: none; border: none; color: #94A3B8; cursor: pointer; font-size: 14px; }
+        .del-btn:hover { color: var(--danger); }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4);
+            display: none; justify-content: center; align-items: center; z-index: 100;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal { background: white; padding: 1.5rem; border-radius: 1rem; width: 90%; max-width: 500px; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+        .close-btn { background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-muted); }
+        
+        .behavior-list { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 1rem; }
+        .behavior-item {
+            display: flex; justify-content: space-between; align-items: center; padding: 0.6rem 0.8rem;
+            border: 1px solid #E2E8F0; border-radius: 0.5rem; background: white; cursor: pointer; font-weight: 600;
+        }
+        .behavior-item:hover { border-color: var(--primary); background: #F8FAFC; }
+
+        table { width: 100%; border-collapse: collapse; background: white; border-radius: 0.5rem; overflow: hidden; }
+        th, td { padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid #E2E8F0; }
+        th { background: #F8FAFC; color: var(--text-muted); font-size: 0.85rem; }
+
+        input[type="text"], input[type="number"], select { padding: 0.5rem 0.75rem; border: 1px solid #CBD5E1; border-radius: 0.375rem; font-size: 0.9rem; outline: none; }
+        input:focus, select:focus { border-color: var(--primary); }
+
+        /* Float Anim */
+        @keyframes popUp {
+            0% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-30px); }
+        }
+        .anim-tag { position: absolute; top: 15%; left: 50%; transform: translateX(-50%); font-weight: 800; font-size: 1.2rem; pointer-events: none; animation: popUp 0.7s forwards; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div style="display: flex; align-items: center; gap: 1rem;">
+            <div class="logo">👾 課堂行為與計分管理系統</div>
+            <div class="sync-status"><span class="sync-dot" id="sync-dot"></span><span id="sync-text">雲端未同步</span></div>
+        </div>
+        <nav>
+            <button class="nav-btn active" onclick="switchTab('tracker')">加扣分專區</button>
+            <button class="nav-btn" onclick="switchTab('roster')">學生名冊管理</button>
+            <button class="nav-btn" onclick="switchTab('store')">獎勵商城管理</button>
+            <button class="nav-btn" onclick="switchTab('logs')">歷史紀錄</button>
+        </nav>
+    </header>
+
+    <div class="container">
+        <!-- 頁籤 1: 加扣分專區 -->
+        <div id="tab-tracker">
+            <div class="toolbar">
+                <div class="btn-group">
+                    <button class="btn btn-outline" onclick="toggleSelectAll()">全選 / 取消</button>
+                    <button class="btn btn-primary" onclick="openBatchModal()">多選加扣分 (<span id="select-cnt">0</span>)</button>
+                    <button class="btn btn-success" onclick="quickAll(+1)">全班 +1 分</button>
+                </div>
+                <div class="btn-group">
+                    <label class="btn btn-outline">
+                        📂 匯入 Excel 名冊
+                        <input type="file" id="import-excel" accept=".xlsx, .xls" style="display:none;" onchange="importExcel(event)">
+                    </label>
+                    <button class="btn btn-outline" onclick="exportStudentsExcel()">📥 匯出名冊 Excel</button>
+                </div>
+            </div>
+            <div class="student-grid" id="student-grid"></div>
+        </div>
+
+        <!-- 頁籤 2: 學生名冊管理 -->
+        <div id="tab-roster" style="display: none;">
+            <div class="toolbar">
+                <div style="display: flex; gap: 0.5rem; align-items: center; width: 100%; flex-wrap: wrap;">
+                    <select id="new-avatar" style="font-size: 1.1rem; max-width: 200px;">
+                        <optgroup label="🧑 人物角色">
+                            <option value="👦">👦 男生</option>
+                            <option value="👧">👧 女生</option>
+                            <option value="👨‍🎓">👨‍🎓 男學生</option>
+                            <option value="👩‍🎓">👩‍🎓 女學生</option>
+                            <option value="🦸‍♂️">🦸‍♂️ 英雄</option>
+                        </optgroup>
+                        <optgroup label="🐾 豐富動物">
+                            <option value="🐶">🐶 小狗</option>
+                            <option value="🐱">🐱 貓咪</option>
+                            <option value="🐰">🐰 兔子</option>
+                            <option value="🦊">🦊 狐狸</option>
+                            <option value="🐻">🐻 熊熊</option>
+                            <option value="🐼">🐼 貓熊</option>
+                            <option value="🐨">🐨 無尾熊</option>
+                            <option value="🐯">🐯 老虎</option>
+                            <option value="🦁">🦁 獅子</option>
+                            <option value="🐮">🐮 小牛</option>
+                            <option value="🐷">🐷 小豬</option>
+                            <option value="🐸">🐸 青蛙</option>
+                            <option value="🐵">🐵 猴子</option>
+                            <option value="🐧">🐧 企鵝</option>
+                            <option value="🦄">🦄 獨角獸</option>
+                            <option value="🐬">🐬 海豚</option>
+                            <option value="🦈">🦈 鯊魚</option>
+                            <option value="🦉">🦉 貓頭鷹</option>
+                            <option value="🐢">🐢 烏龜</option>
+                            <option value="🦖">🦖 恐龍</option>
+                            <option value="🐘">🐘 大象</option>
+                            <option value="🦒">🦒 長頸鹿</option>
+                            <option value="🐝">🐝 蜜蜂</option>
+                            <option value="🦋">🦋 蝴蝶</option>
+                        </optgroup>
+                        <optgroup label="⚽ 體育運動">
+                            <option value="⚽">⚽ 足球</option>
+                            <option value="🏀">🏀 籃球</option>
+                            <option value="🏈">🏈 美式足球</option>
+                            <option value="⚾">⚾ 棒球</option>
+                            <option value="🎾">🎾 網球</option>
+                            <option value="🏐">🏐 排球</option>
+                            <option value="🏓">🏓 桌球</option>
+                            <option value="🏸">🏸 羽球</option>
+                            <option value="⛳">⛳ 高爾夫</option>
+                            <option value="🎯">🎯 射箭/飛鏢</option>
+                            <option value="🥊">🥊 拳擊</option>
+                            <option value="🥋">🥋 空手道</option>
+                            <option value="🛹">🛹 滑板</option>
+                            <option value="🏊">🏊 游泳</option>
+                            <option value="🚴">🚴 騎車</option>
+                        </optgroup>
+                        <optgroup label="🎸 音樂樂器">
+                            <option value="🎸">🎸 吉他</option>
+                            <option value="🎹">🎹 鋼琴/鍵盤</option>
+                            <option value="🎷">🎷 薩克斯風</option>
+                            <option value="🎺">🎺 小號</option>
+                            <option value="🎻">🎻 小提琴</option>
+                            <option value="🥁">🥁 爵士鼓</option>
+                            <option value="🪕">🪕 斑鳩琴</option>
+                            <option value="🎙️">🎙️ 麥克風</option>
+                            <option value="🎧">🎧 耳機</option>
+                            <option value="🎶">🎶 音符</option>
+                        </optgroup>
+                        <optgroup label="🚀 探索與載具">
+                            <option value="🚀">🚀 火箭</option>
+                            <option value="🌟">🌟 星星</option>
+                            <option value="🎨">🎨 調色盤</option>
+                            <option value="🏎️">🏎️ 賽車</option>
+                        </optgroup>
+                    </select>
+                    <input type="text" id="new-name" placeholder="輸入學生姓名" style="flex-grow: 1;">
+                    <button class="btn btn-primary" onclick="addStudent()">➕ 新增學生</button>
+                </div>
+            </div>
+
+            <div id="roster-list"></div>
+        </div>
+
+        <!-- 頁籤 3: 獎勵商城 -->
+        <div id="tab-store" style="display: none;">
+            <div class="toolbar">
+                <div style="display: flex; gap: 0.5rem; align-items: center; width: 100%; flex-wrap: wrap;">
+                    <select id="new-reward-icon" style="font-size: 1.2rem;">
+                        <option value="🪑">🪑 換座位</option>
+                        <option value="🎟️">🎟️ 免作業</option>
+                        <option value="👑">👑 當組長</option>
+                        <option value="🎵">🎵 背景音樂</option>
+                        <option value="🎁">🎁 禮物</option>
+                        <option value="🍔">🍔 美食點心</option>
+                        <option value="🍦">🍦 冰淇淋</option>
+                        <option value="🎮">🎮 遊戲時間</option>
+                        <option value="✏️">✏️ 文具獎勵</option>
+                        <option value="🏆">🏆 榮譽卡</option>
+                    </select>
+                    <input type="text" id="new-reward-title" placeholder="獎勵品項名稱" style="flex-grow: 1;">
+                    <input type="number" id="new-reward-cost" placeholder="所需點數" style="width: 100px;">
+                    <button class="btn btn-primary" onclick="addReward()">➕ 新增獎勵品項</button>
+                    
+                    <div style="margin-left: auto; display: flex; gap: 0.5rem;">
+                        <label class="btn btn-outline">
+                            📂 匯入獎勵 Excel
+                            <input type="file" id="import-reward-excel" accept=".xlsx, .xls" style="display:none;" onchange="importRewardsExcel(event)">
+                        </label>
+                        <button class="btn btn-outline" onclick="exportRewardsExcel()">📥 匯出獎勵 Excel</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="store-grid" id="store-grid"></div>
+        </div>
+
+        <!-- 頁籤 4: 歷史紀錄 -->
+        <div id="tab-logs" style="display: none;">
+            <div class="toolbar">
+                <h3 style="font-size: 1.1rem;">📜 點數變動明細</h3>
+                <div class="btn-group">
+                    <button class="btn btn-outline" onclick="exportCSV()">📥 匯出明細 (CSV)</button>
+                    <button class="btn-danger-link" onclick="resetAllData()">↺ 重置清空</button>
+                </div>
+            </div>
+            <table>
+                <thead>
+                    <tr><th>時間</th><th>學生</th><th>項目 / 原因</th><th>點數變動</th></tr>
+                </thead>
+                <tbody id="logs-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 行為選擇彈窗 -->
+    <div class="modal-overlay" id="behavior-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="modal-title">選擇行為</h3>
+                <button class="close-btn" onclick="closeModal('behavior-modal')">&times;</button>
+            </div>
+            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0.5rem;">正面加分：</p>
+            <div class="behavior-list" id="pos-behaviors"></div>
+            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0.5rem;">待改進扣分：</p>
+            <div class="behavior-list" id="neg-behaviors"></div>
+        </div>
+    </div>
+
+    <!-- 獎勵兌換彈窗 -->
+    <div class="modal-overlay" id="redeem-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="redeem-title">選擇學生兌換</h3>
+                <button class="close-btn" onclick="closeModal('redeem-modal')">&times;</button>
+            </div>
+            <div id="redeem-list" style="max-height: 250px; overflow-y: auto;"></div>
+        </div>
+    </div>
+
+    <script>
+        // Google Apps Script URL 雲端連結
+        const GAS_URL = "https://script.google.com/macros/s/AKfycbzVImxD0zWoI0xUbujCXoUuqPkVuOKroLtBztQi1hZ3zKwffAfFnp0_q-Lt7OMmd_Obwg/exec";
+
+        const AVATAR_GROUPS = [
+            { group: '🧑 人物角色', icons: ['👦', '👧', '👨‍🎓', '👩‍🎓', '🦸‍♂️'] },
+            { group: '🐾 豐富動物', icons: ['🐶', '🐱', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮', '🐷', '🐸', '🐵', '🐧', '🦄', '🐬', '🦈', '🦉', '🐢', '🦖', '🐘', '🦒', '🐝', '🦋'] },
+            { group: '⚽ 體育運動', icons: ['⚽', '🏀', '🏈', '⚾', '🎾', '🏐', '🏓', '🏸', '⛳', '🎯', '🥊', '🥋', '🛹', '🏊', '🚴'] },
+            { group: '🎸 音樂樂器', icons: ['🎸', '🎹', '🎷', '🎺', '🎻', '🥁', '🪕', '🎙️', '🎧', '🎶'] },
+            { group: '🚀 探索載具', icons: ['🚀', '🌟', '🎨', '🏎️'] }
+        ];
+
+        const PRESET_REWARD_ICONS = ['🪑', '🎟️', '👑', '🎵', '🎁', '🍔', '🍦', '🎮', '✏️', '🏆', '⭐', '🎬', '🍿', '🎯'];
+
+        const DEFAULT_STUDENTS = [
+            { id: 1, name: '王小明', avatar: '🦁', currentPoints: 10, lifetimePoints: 20 },
+            { id: 2, name: '李美玲', avatar: '🦊', currentPoints: 15, lifetimePoints: 25 },
+            { id: 3, name: '張偉強', avatar: '🐼', currentPoints: 5,  lifetimePoints: 12 },
+            { id: 4, name: '陳雅婷', avatar: '🦄', currentPoints: 18, lifetimePoints: 30 }
+        ];
+
+        const DEFAULT_REWARDS = [
+            { id: 'r1', title: '換座位券', cost: 15, icon: '🪑' },
+            { id: 'r2', title: '免寫作業一次', cost: 30, icon: '🎟️' },
+            { id: 'r3', title: '當一日組長', cost: 10, icon: '👑' },
+            { id: 'r4', title: '選課堂背景音樂', cost: 5, icon: '🎵' }
+        ];
+
+        const BEHAVIORS = [
+            { title: '踴躍發言', value: 1, type: 'pos', icon: '🙋‍♂️' },
+            { title: '熱心助人', value: 2, type: 'pos', icon: '🤝' },
+            { title: '團隊合作', value: 2, type: 'pos', icon: '⭐' },
+            { title: '作業優異', value: 1, type: 'pos', icon: '📝' },
+            { title: '課堂吵鬧', value: -1, type: 'neg', icon: '🤫' },
+            { title: '未帶課本', value: -1, type: 'neg', icon: '📚' },
+            { title: '未專心聽講', value: -1, type: 'neg', icon: '⚠️' }
+        ];
+
+        let students = JSON.parse(localStorage.getItem('v5_students')) || DEFAULT_STUDENTS;
+        let rewards = JSON.parse(localStorage.getItem('v5_rewards')) || DEFAULT_REWARDS;
+        let logs = JSON.parse(localStorage.getItem('v5_logs')) || [];
+        let selectedStudentIds = new Set();
+        let targetStudentId = null;
+
+        /* 雲端資料同步機制 */
+        function setSyncStatus(isSynced, text) {
+            const dot = document.getElementById('sync-dot');
+            const label = document.getElementById('sync-text');
+            if (isSynced) {
+                dot.classList.add('active');
+                label.innerText = text || "已連線至雲端試算表";
+            } else {
+                dot.classList.remove('active');
+                label.innerText = text || "正在連線雲端...";
+            }
+        }
+
+        async function loadDataFromCloud() {
+            if (!GAS_URL) return;
+            setSyncStatus(false, "與雲端同步中...");
+            try {
+                const res = await fetch(GAS_URL);
+                const text = await res.text();
+                if (text && text.trim() !== "" && text !== "{}") {
+                    const data = JSON.parse(text);
+                    if (data.students) students = data.students;
+                    if (data.rewards) rewards = data.rewards;
+                    if (data.logs) logs = data.logs;
+                    
+                    localStorage.setItem('v5_students', JSON.stringify(students));
+                    localStorage.setItem('v5_rewards', JSON.stringify(rewards));
+                    localStorage.setItem('v5_logs', JSON.stringify(logs));
+                    renderAll();
+                }
+                setSyncStatus(true, "已連線至雲端試算表");
+            } catch (e) {
+                console.error("雲端載入失敗，使用本機紀錄", e);
+                setSyncStatus(false, "離線模式（僅在本機）");
+            }
+        }
+
+        function saveData() {
+            localStorage.setItem('v5_students', JSON.stringify(students));
+            localStorage.setItem('v5_rewards', JSON.stringify(rewards));
+            localStorage.setItem('v5_logs', JSON.stringify(logs));
+
+            if (!GAS_URL) return;
+            setSyncStatus(false, "同步中...");
+
+            fetch(GAS_URL, {
+                method: "POST",
+                mode: "no-cors",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ students, rewards, logs })
+            }).then(() => {
+                setSyncStatus(true, "已連線至雲端試算表");
+            }).catch(err => {
+                setSyncStatus(false, "同步失敗 (使用本機快取)");
+            });
+        }
+
+        function resetAllData() {
+            if (confirm('確定要將學生名單與獎勵商城重置回預設值嗎？')) {
+                localStorage.removeItem('v5_students');
+                localStorage.removeItem('v5_rewards');
+                localStorage.removeItem('v5_logs');
+                students = JSON.parse(JSON.stringify(DEFAULT_STUDENTS));
+                rewards = JSON.parse(JSON.stringify(DEFAULT_REWARDS));
+                logs = [];
+                selectedStudentIds.clear();
+                saveData();
+                renderAll();
+            }
+        }
+
+        /* 音效處理 */
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playSound(isPositive) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            if (isPositive) {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(587.33, audioCtx.currentTime);
+                osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.08);
+                gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.25);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.25);
+            } else {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(160, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.25);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.25);
+            }
+        }
+
+        /* Excel - 學生名冊匯入/匯出 */
+        function importExcel(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                try {
+                    const data = new Uint8Array(evt.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                    if (json.length === 0) return alert('Excel 檔內無資料！');
+
+                    students = json.map((item, idx) => ({
+                        id: item['學號'] || item['ID'] || (idx + 1),
+                        name: item['學生姓名'] || item['姓名'] || `學生${idx + 1}`,
+                        avatar: item['學生 Icon'] || item['頭像'] || '👦',
+                        currentPoints: Number(item['目前點數'] ?? 10),
+                        lifetimePoints: Number(item['總點數'] ?? 20)
+                    }));
+                    saveData(); renderAll();
+                    alert(`成功從 Excel 匯入 ${students.length} 位學生名單！`);
+                } catch (err) { alert('匯入失敗，請確認格式！'); }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function exportStudentsExcel() {
+            const exportData = students.map(s => ({
+                "學號": s.id, "學生姓名": s.name, "學生 Icon": s.avatar, "目前點數": s.currentPoints, "總點數": s.lifetimePoints
+            }));
+            const worksheet = XLSX.utils.json_to_sheet(exportData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "學生名冊");
+            XLSX.writeFile(workbook, `班級學生名冊_${new Date().toISOString().slice(0,10)}.xlsx`);
+        }
+
+        /* Excel - 獎勵商城匯入/匯出 */
+        function importRewardsExcel(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                try {
+                    const data = new Uint8Array(evt.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                    if (json.length === 0) return alert('Excel 檔內無資料！');
+
+                    rewards = json.map((item, idx) => ({
+                        id: 'r_' + Date.now() + '_' + idx,
+                        title: item['品項名稱'] || item['名稱'] || `獎勵${idx + 1}`,
+                        icon: item['圖示 Icon'] || item['圖示'] || '🎁',
+                        cost: Number(item['所需點數'] ?? 10)
+                    }));
+                    saveData(); renderStore();
+                    alert(`成功從 Excel 匯入 ${rewards.length} 項獎勵商品！`);
+                } catch (err) { alert('匯入失敗，請確認格式！'); }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function exportRewardsExcel() {
+            const exportData = rewards.map(r => ({
+                "品項名稱": r.title, "圖示 Icon": r.icon, "所需點數": r.cost
+            }));
+            const worksheet = XLSX.utils.json_to_sheet(exportData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "獎勵清單");
+            XLSX.writeFile(workbook, `獎勵商城清單_${new Date().toISOString().slice(0,10)}.xlsx`);
+        }
+
+        /* 渲染畫面 */
+        function renderStudents() {
+            const grid = document.getElementById('student-grid');
+            grid.innerHTML = '';
+
+            students.forEach(s => {
+                const isSelected = selectedStudentIds.has(s.id);
+                const card = document.createElement('div');
+                card.className = `student-card ${isSelected ? 'selected' : ''}`;
+                card.id = `card-${s.id}`;
+                card.onclick = (e) => {
+                    if (e.target.tagName !== 'INPUT' && !e.target.classList.contains('quick-btn')) openSingleModal(s.id);
+                };
+
+                card.innerHTML = `
+                    <input type="checkbox" class="card-checkbox" ${isSelected ? 'checked' : ''} onchange="toggleSelect(${s.id}, event)">
+                    <div class="avatar">${s.avatar}</div>
+                    <div class="name">${s.name}</div>
+                    <div class="pts-container">
+                        <span class="pt-badge curr-pt">${s.currentPoints} pts</span>
+                        <span class="pt-badge total-pt">總 ${s.lifetimePoints}</span>
+                    </div>
+                    <div class="quick-btns">
+                        <button class="quick-btn q-add" onclick="quickPoint(${s.id}, 1, event)">+1</button>
+                        <button class="quick-btn q-sub" onclick="quickPoint(${s.id}, -1, event)">-1</button>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+
+            document.getElementById('select-cnt').innerText = selectedStudentIds.size;
+        }
+
+        function renderRoster() {
+            const list = document.getElementById('roster-list');
+            list.innerHTML = '';
+
+            students.forEach((s, idx) => {
+                const item = document.createElement('div');
+                item.className = 'roster-card';
+
+                let avatarOptionsHTML = '';
+                AVATAR_GROUPS.forEach(g => {
+                    avatarOptionsHTML += `<optgroup label="${g.group}">`;
+                    g.icons.forEach(ic => {
+                        avatarOptionsHTML += `<option value="${ic}" ${s.avatar === ic ? 'selected' : ''}>${ic}</option>`;
+                    });
+                    avatarOptionsHTML += `</optgroup>`;
+                });
+
+                item.innerHTML = `
+                    <div class="roster-info">
+                        <select style="font-size: 1.2rem;" onchange="updateStudentAvatar(${idx}, this.value)">
+                            ${avatarOptionsHTML}
+                        </select>
+                        <input type="text" value="${s.name}" onchange="updateStudentName(${idx}, this.value)" style="flex-grow: 1;">
+                        <span style="font-size:0.85rem; color:var(--text-muted);">目前: ${s.currentPoints} pts</span>
+                    </div>
+                    <button class="btn btn-outline" style="color:var(--danger); border-color:#FCA5A5;" onclick="deleteStudent(${idx})">刪除</button>
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        function renderStore() {
+            const grid = document.getElementById('store-grid');
+            grid.innerHTML = '';
+
+            rewards.forEach((r, idx) => {
+                const card = document.createElement('div');
+                card.className = 'store-card';
+                const iconOptions = PRESET_REWARD_ICONS.map(ic => `<option value="${ic}" ${r.icon === ic ? 'selected' : ''}>${ic}</option>`).join('');
+
+                card.innerHTML = `
+                    <button class="del-btn" onclick="deleteReward(${idx})">✖</button>
+                    <select class="store-icon-select" onchange="updateRewardIcon(${idx}, this.value)">${iconOptions}</select>
+                    <input type="text" value="${r.title}" style="text-align:center; font-weight:bold; width:100%; margin-bottom:0.3rem;" onchange="updateRewardTitle(${idx}, this.value)">
+                    <div style="display:flex; align-items:center; justify-content:center; gap:0.2rem; margin-bottom:0.75rem; color:#D97706; font-weight:bold; font-size:0.9rem;">
+                        <span>所需:</span>
+                        <input type="number" value="${r.cost}" style="width:60px; text-align:center; padding:2px 4px;" onchange="updateRewardCost(${idx}, this.value)">
+                        <span>pts</span>
+                    </div>
+                    <button class="btn btn-primary" style="width:100%" onclick="openRedeemModal('${r.id}')">🎁 兌換</button>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        function addStudent() {
+            const nameInput = document.getElementById('new-name');
+            const avatarInput = document.getElementById('new-avatar');
+            if (!nameInput.value.trim()) return alert('請輸入學生姓名！');
+
+            students.push({ id: Date.now(), name: nameInput.value.trim(), avatar: avatarInput.value, currentPoints: 0, lifetimePoints: 0 });
+            nameInput.value = '';
+            saveData(); renderAll();
+        }
+        function updateStudentName(i, val) { students[i].name = val.trim(); saveData(); renderStudents(); }
+        function updateStudentAvatar(i, val) { students[i].avatar = val; saveData(); renderStudents(); }
+        function deleteStudent(i) {
+            if (confirm(`確定要刪除 ${students[i].name} 嗎？`)) { students.splice(i, 1); saveData(); renderAll(); }
+        }
+
+        function addReward() {
+            const titleInput = document.getElementById('new-reward-title');
+            const costInput = document.getElementById('new-reward-cost');
+            const iconInput = document.getElementById('new-reward-icon');
+
+            if (!titleInput.value.trim()) return alert('請輸入獎勵名稱！');
+            if (!costInput.value || costInput.value <= 0) return alert('請輸入有效的所需點數！');
+
+            rewards.push({ id: 'r_' + Date.now(), title: titleInput.value.trim(), cost: Number(costInput.value), icon: iconInput.value });
+            titleInput.value = ''; costInput.value = '';
+            saveData(); renderStore();
+        }
+        function updateRewardIcon(i, val) { rewards[i].icon = val; saveData(); renderStore(); }
+        function updateRewardTitle(i, val) { rewards[i].title = val.trim(); saveData(); }
+        function updateRewardCost(i, val) { rewards[i].cost = Number(val) || 0; saveData(); }
+        function deleteReward(i) {
+            if (confirm(`確定要刪除「${rewards[i].title}」獎勵嗎？`)) { rewards.splice(i, 1); saveData(); renderStore(); }
+        }
+
+        function renderBehaviors() {
+            const pos = document.getElementById('pos-behaviors');
+            const neg = document.getElementById('neg-behaviors');
+            pos.innerHTML = ''; neg.innerHTML = '';
+
+            BEHAVIORS.forEach(b => {
+                const btn = document.createElement('button');
+                btn.className = 'behavior-item';
+                btn.onclick = () => applyBehavior(b);
+                btn.innerHTML = `<span>${b.icon} ${b.title}</span> <span style="color:${b.value > 0 ? '#10B981':'#EF4444'}">${b.value > 0 ? '+'+b.value : b.value}</span>`;
+                if (b.type === 'pos') pos.appendChild(btn); else neg.appendChild(btn);
+            });
+        }
+
+        function renderLogs() {
+            const body = document.getElementById('logs-body');
+            body.innerHTML = '';
+
+            logs.slice().reverse().forEach(l => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td style="color:var(--text-muted); font-size:0.85rem;">${l.time}</td>
+                    <td style="font-weight:bold;">${l.studentName}</td>
+                    <td>${l.reason}</td>
+                    <td style="font-weight:bold; color:${l.change > 0 ? '#10B981':'#EF4444'}">${l.change > 0 ? '+'+l.change : l.change}</td>
+                `;
+                body.appendChild(tr);
+            });
+        }
+
+        function renderAll() {
+            renderStudents();
+            renderRoster();
+            renderStore();
+            renderBehaviors();
+            renderLogs();
+        }
+
+        function toggleSelect(id, e) {
+            e.stopPropagation();
+            if (selectedStudentIds.has(id)) selectedStudentIds.delete(id);
+            else selectedStudentIds.add(id);
+            renderStudents();
+        }
+
+        function toggleSelectAll() {
+            if (selectedStudentIds.size === students.length) selectedStudentIds.clear();
+            else students.forEach(s => selectedStudentIds.add(s.id));
+            renderStudents();
+        }
+
+        function triggerAnim(cardId, text, isPos) {
+            const card = document.getElementById(cardId);
+            if (!card) return;
+            const tag = document.createElement('div');
+            tag.className = 'anim-tag';
+            tag.style.color = isPos ? '#10B981' : '#EF4444';
+            tag.innerText = text;
+            card.appendChild(tag);
+            setTimeout(() => tag.remove(), 700);
+        }
+
+        function addPoints(student, val, reason) {
+            student.currentPoints += val;
+            if (val > 0) student.lifetimePoints += val;
+            if (student.currentPoints < 0) student.currentPoints = 0;
+
+            playSound(val > 0);
+            triggerAnim(`card-${student.id}`, (val > 0 ? '+' : '') + val, val > 0);
+
+            logs.push({
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                studentName: student.name,
+                reason: reason,
+                change: val
+            });
+            saveData();
+        }
+
+        function quickPoint(id, val, e) {
+            e.stopPropagation();
+            const s = students.find(x => x.id === id);
+            if (s) { addPoints(s, val, val > 0 ? '快速加分' : '快速扣分'); renderStudents(); }
+        }
+
+        function quickAll(val) {
+            students.forEach(s => addPoints(s, val, '全班獎勵'));
+            renderStudents();
+        }
+
+        function openSingleModal(id) {
+            targetStudentId = id;
+            const s = students.find(x => x.id === id);
+            document.getElementById('modal-title').innerText = `給 ${s.name} 發放點數`;
+            document.getElementById('behavior-modal').classList.add('active');
+        }
+
+        function openBatchModal() {
+            if (selectedStudentIds.size === 0) return alert('請先勾選學生！');
+            targetStudentId = null;
+            document.getElementById('modal-title').innerText = `批次發放 (${selectedStudentIds.size} 人)`;
+            document.getElementById('behavior-modal').classList.add('active');
+        }
+
+        function applyBehavior(b) {
+            if (targetStudentId !== null) {
+                const s = students.find(x => x.id === targetStudentId);
+                addPoints(s, b.value, b.title);
+            } else {
+                students.filter(s => selectedStudentIds.has(s.id)).forEach(s => addPoints(s, b.value, b.title));
+            }
+            closeModal('behavior-modal');
+            renderStudents();
+        }
+
+        function openRedeemModal(rewardId) {
+            const r = rewards.find(x => x.id === rewardId);
+            if (!r) return;
+            document.getElementById('redeem-title').innerText = `兌換：${r.title} (${r.cost} pts)`;
+            const list = document.getElementById('redeem-list');
+            list.innerHTML = '';
+
+            students.forEach(s => {
+                const div = document.createElement('div');
+                div.style.cssText = 'display:flex; justify-content:space-between; align-items:center; padding:0.5rem 0; border-bottom:1px solid #E2E8F0;';
+                const canAfford = s.currentPoints >= r.cost;
+                div.innerHTML = `
+                    <span><strong>${s.name}</strong> (${s.currentPoints} pts)</span>
+                    <button class="btn ${canAfford ? 'btn-success':'btn-outline'}" ${canAfford ? '' : 'disabled style="opacity:0.5"'} onclick="redeem('${s.id}', '${r.id}')">
+                        ${canAfford ? '確認兌換' : '點數不足'}
+                    </button>
+                `;
+                list.appendChild(div);
+            });
+            document.getElementById('redeem-modal').classList.add('active');
+        }
+
+        function redeem(studentId, rewardId) {
+            const s = students.find(x => x.id == studentId);
+            const r = rewards.find(x => x.id === rewardId);
+            if (s && r && s.currentPoints >= r.cost) {
+                s.currentPoints -= r.cost;
+                playSound(true);
+                logs.push({
+                    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    studentName: s.name,
+                    reason: `🎁 兌換: ${r.title}`,
+                    change: -r.cost
+                });
+                saveData();
+                closeModal('redeem-modal');
+                renderStudents();
+                alert(`成功幫 ${s.name} 兌換「${r.title}」！`);
+            }
+        }
+
+        function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+        function switchTab(tab) {
+            document.getElementById('tab-tracker').style.display = tab === 'tracker' ? 'block' : 'none';
+            document.getElementById('tab-roster').style.display = tab === 'roster' ? 'block' : 'none';
+            document.getElementById('tab-store').style.display = tab === 'store' ? 'block' : 'none';
+            document.getElementById('tab-logs').style.display = tab === 'logs' ? 'block' : 'none';
+
+            document.querySelectorAll('.nav-btn').forEach((btn, idx) => {
+                btn.classList.toggle('active', 
+                    (tab === 'tracker' && idx === 0) || 
+                    (tab === 'roster' && idx === 1) || 
+                    (tab === 'store' && idx === 2) || 
+                    (tab === 'logs' && idx === 3)
+                );
+            });
+
+            if (tab === 'roster') renderRoster();
+            if (tab === 'store') renderStore();
+            if (tab === 'logs') renderLogs();
+        }
+
+        function exportCSV() {
+            let csv = "\uFEFF時間,學生,項目,點數變動\n";
+            logs.forEach(l => csv += `"${l.time}","${l.studentName}","${l.reason}","${l.change}"\n`);
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+            a.download = `點數紀錄_${new Date().toISOString().slice(0,10)}.csv`;
+            a.click();
+        }
+
+        // 初始化：渲染畫面並向雲端同步數據
+        renderAll();
+        loadDataFromCloud();
+    </script>
+</body>
+</html>
