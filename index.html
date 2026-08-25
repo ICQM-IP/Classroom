@@ -75,14 +75,13 @@
         .pts-container { display: flex; justify-content: center; gap: 0.3rem; margin-bottom: 0.75rem; font-size: 0.8rem; font-weight: 700; }
         .pt-badge { padding: 0.2rem 0.5rem; border-radius: 1rem; }
         .curr-pt { background: #E0E7FF; color: var(--primary); }
-        .total-pt { background: #FEF3C7; color: #D97706; }
 
         .quick-btns { display: flex; gap: 0.25rem; justify-content: center; }
         .quick-btn { border: none; padding: 0.25rem 0.6rem; border-radius: 0.375rem; font-weight: bold; cursor: pointer; font-size: 0.85rem; }
         .q-add { background: #D1FAE5; color: #047857; }
         .q-sub { background: #FEE2E2; color: #B91C1C; }
 
-        /* Store & Roster Management */
+        /* Store & Roster & Behavior Management */
         .store-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 1rem; }
         .store-card { background: white; border-radius: 0.75rem; padding: 1.25rem; border: 1px solid #E2E8F0; text-align: center; position: relative; }
         .store-icon-select { font-size: 2.2rem; border: none; background: transparent; cursor: pointer; margin-bottom: 0.25rem; }
@@ -135,6 +134,7 @@
         <nav>
             <button class="nav-btn active" onclick="switchTab('tracker')">加扣分專區</button>
             <button class="nav-btn" onclick="switchTab('roster')">學生名冊管理</button>
+            <button class="nav-btn" onclick="switchTab('behaviors')">加扣分項目管理</button>
             <button class="nav-btn" onclick="switchTab('store')">獎勵商城管理</button>
             <button class="nav-btn" onclick="switchTab('logs')">歷史紀錄</button>
         </nav>
@@ -242,7 +242,38 @@
             <div id="roster-list"></div>
         </div>
 
-        <!-- 頁籤 3: 獎勵商城 -->
+        <!-- 頁籤 3: 加扣分項目管理 -->
+        <div id="tab-behaviors" style="display: none;">
+            <div class="toolbar">
+                <div style="display: flex; gap: 0.5rem; align-items: center; width: 100%; flex-wrap: wrap;">
+                    <select id="new-behavior-icon" style="font-size: 1.2rem;">
+                        <option value="🙋‍♂️">🙋‍♂️ 踴躍發言</option>
+                        <option value="🤝">🤝 熱心助人</option>
+                        <option value="⭐">⭐ 團隊合作</option>
+                        <option value="📝">📝 作業優異</option>
+                        <option value="👏">👏 良好表現</option>
+                        <option value="🎯">🎯 專注聽講</option>
+                        <option value="🤫">🤫 課堂吵鬧</option>
+                        <option value="📚">📚 未帶課本</option>
+                        <option value="⚠️">⚠️ 違規警告</option>
+                        <option value="🚶">🚶 遲到</option>
+                        <option value="🗣️">🗣️ 私下講話</option>
+                        <option value="😴">😴 上課打瞌睡</option>
+                    </select>
+                    <select id="new-behavior-type" style="font-size: 0.9rem;">
+                        <option value="pos">正面加分 (+)</option>
+                        <option value="neg">待改進扣分 (-)</option>
+                    </select>
+                    <input type="text" id="new-behavior-title" placeholder="項目名稱 (如: 準時繳交作業)" style="flex-grow: 1;">
+                    <input type="number" id="new-behavior-pts" placeholder="分數 (如 1 或 2)" style="width: 100px;" value="1">
+                    <button class="btn btn-primary" onclick="addBehaviorItem()">➕ 新增加扣分項目</button>
+                </div>
+            </div>
+
+            <div class="store-grid" id="behavior-grid"></div>
+        </div>
+
+        <!-- 頁籤 4: 獎勵商城 -->
         <div id="tab-store" style="display: none;">
             <div class="toolbar">
                 <div style="display: flex; gap: 0.5rem; align-items: center; width: 100%; flex-wrap: wrap;">
@@ -275,7 +306,7 @@
             <div class="store-grid" id="store-grid"></div>
         </div>
 
-        <!-- 頁籤 4: 歷史紀錄 -->
+        <!-- 頁籤 5: 歷史紀錄 -->
         <div id="tab-logs" style="display: none;">
             <div class="toolbar">
                 <h3 style="font-size: 1.1rem;">📜 點數變動明細</h3>
@@ -346,18 +377,19 @@
             { id: 'r4', title: '選課堂背景音樂', cost: 5, icon: '🎵' }
         ];
 
-        const BEHAVIORS = [
-            { title: '踴躍發言', value: 1, type: 'pos', icon: '🙋‍♂️' },
-            { title: '熱心助人', value: 2, type: 'pos', icon: '🤝' },
-            { title: '團隊合作', value: 2, type: 'pos', icon: '⭐' },
-            { title: '作業優異', value: 1, type: 'pos', icon: '📝' },
-            { title: '課堂吵鬧', value: -1, type: 'neg', icon: '🤫' },
-            { title: '未帶課本', value: -1, type: 'neg', icon: '📚' },
-            { title: '未專心聽講', value: -1, type: 'neg', icon: '⚠️' }
+        const DEFAULT_BEHAVIORS = [
+            { id: 'b1', title: '踴躍發言', value: 1, type: 'pos', icon: '🙋‍♂️' },
+            { id: 'b2', title: '熱心助人', value: 2, type: 'pos', icon: '🤝' },
+            { id: 'b3', title: '團隊合作', value: 2, type: 'pos', icon: '⭐' },
+            { id: 'b4', title: '作業優異', value: 1, type: 'pos', icon: '📝' },
+            { id: 'b5', title: '課堂吵鬧', value: -1, type: 'neg', icon: '🤫' },
+            { id: 'b6', title: '未帶課本', value: -1, type: 'neg', icon: '📚' },
+            { id: 'b7', title: '未專心聽講', value: -1, type: 'neg', icon: '⚠️' }
         ];
 
         let students = JSON.parse(localStorage.getItem('v5_students')) || DEFAULT_STUDENTS;
         let rewards = JSON.parse(localStorage.getItem('v5_rewards')) || DEFAULT_REWARDS;
+        let behaviors = JSON.parse(localStorage.getItem('v5_behaviors')) || DEFAULT_BEHAVIORS;
         let logs = JSON.parse(localStorage.getItem('v5_logs')) || [];
         let selectedStudentIds = new Set();
         let targetStudentId = null;
@@ -385,10 +417,12 @@
                     const data = JSON.parse(text);
                     if (data.students) students = data.students;
                     if (data.rewards) rewards = data.rewards;
+                    if (data.behaviors) behaviors = data.behaviors;
                     if (data.logs) logs = data.logs;
                     
                     localStorage.setItem('v5_students', JSON.stringify(students));
                     localStorage.setItem('v5_rewards', JSON.stringify(rewards));
+                    localStorage.setItem('v5_behaviors', JSON.stringify(behaviors));
                     localStorage.setItem('v5_logs', JSON.stringify(logs));
                     renderAll();
                 }
@@ -402,6 +436,7 @@
         function saveData() {
             localStorage.setItem('v5_students', JSON.stringify(students));
             localStorage.setItem('v5_rewards', JSON.stringify(rewards));
+            localStorage.setItem('v5_behaviors', JSON.stringify(behaviors));
             localStorage.setItem('v5_logs', JSON.stringify(logs));
 
             if (!GAS_URL) return;
@@ -411,7 +446,7 @@
                 method: "POST",
                 mode: "no-cors",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ students, rewards, logs })
+                body: JSON.stringify({ students, rewards, behaviors, logs })
             }).then(() => {
                 setSyncStatus(true, "已連線至雲端試算表");
             }).catch(err => {
@@ -420,12 +455,14 @@
         }
 
         function resetAllData() {
-            if (confirm('確定要將學生名單與獎勵商城重置回預設值嗎？')) {
+            if (confirm('確定要將所有學生、加扣分項目與獎勵清單重置回預設值嗎？')) {
                 localStorage.removeItem('v5_students');
                 localStorage.removeItem('v5_rewards');
+                localStorage.removeItem('v5_behaviors');
                 localStorage.removeItem('v5_logs');
                 students = JSON.parse(JSON.stringify(DEFAULT_STUDENTS));
                 rewards = JSON.parse(JSON.stringify(DEFAULT_REWARDS));
+                behaviors = JSON.parse(JSON.stringify(DEFAULT_BEHAVIORS));
                 logs = [];
                 selectedStudentIds.clear();
                 saveData();
@@ -592,6 +629,25 @@
             });
         }
 
+        function renderBehaviorGrid() {
+            const grid = document.getElementById('behavior-grid');
+            grid.innerHTML = '';
+
+            behaviors.forEach((b, idx) => {
+                const card = document.createElement('div');
+                card.className = 'store-card';
+                card.innerHTML = `
+                    <button class="del-btn" onclick="deleteBehavior(${idx})">✖</button>
+                    <div style="font-size: 2.2rem; margin-bottom: 0.25rem;">${b.icon}</div>
+                    <div style="font-weight: bold; font-size: 1rem; margin-bottom: 0.3rem;">${b.title}</div>
+                    <div style="font-weight: bold; font-size: 1.1rem; color: ${b.value > 0 ? 'var(--success)' : 'var(--danger)'};">
+                        ${b.value > 0 ? '+' + b.value : b.value} pts
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
         function renderStore() {
             const grid = document.getElementById('store-grid');
             grid.innerHTML = '';
@@ -616,6 +672,7 @@
             });
         }
 
+        /* 學生管理 */
         function addStudent() {
             const nameInput = document.getElementById('new-name');
             const avatarInput = document.getElementById('new-avatar');
@@ -631,6 +688,41 @@
             if (confirm(`確定要刪除 ${students[i].name} 嗎？`)) { students.splice(i, 1); saveData(); renderAll(); }
         }
 
+        /* 加扣分項目管理 */
+        function addBehaviorItem() {
+            const titleInput = document.getElementById('new-behavior-title');
+            const ptsInput = document.getElementById('new-behavior-pts');
+            const iconInput = document.getElementById('new-behavior-icon');
+            const typeInput = document.getElementById('new-behavior-type');
+
+            if (!titleInput.value.trim()) return alert('請輸入加扣分項目名稱！');
+            let pts = Number(ptsInput.value);
+            if (!pts || pts === 0) return alert('請輸入有效的分數！');
+
+            if (typeInput.value === 'neg' && pts > 0) pts = -pts;
+            if (typeInput.value === 'pos' && pts < 0) pts = Math.abs(pts);
+
+            behaviors.push({
+                id: 'b_' + Date.now(),
+                title: titleInput.value.trim(),
+                value: pts,
+                type: typeInput.value,
+                icon: iconInput.value
+            });
+
+            titleInput.value = '';
+            ptsInput.value = '1';
+            saveData(); renderBehaviors(); renderBehaviorGrid();
+        }
+
+        function deleteBehavior(i) {
+            if (confirm(`確定要刪除「${behaviors[i].title}」項目嗎？`)) {
+                behaviors.splice(i, 1);
+                saveData(); renderBehaviors(); renderBehaviorGrid();
+            }
+        }
+
+        /* 獎勵商城管理 */
         function addReward() {
             const titleInput = document.getElementById('new-reward-title');
             const costInput = document.getElementById('new-reward-cost');
@@ -655,12 +747,12 @@
             const neg = document.getElementById('neg-behaviors');
             pos.innerHTML = ''; neg.innerHTML = '';
 
-            BEHAVIORS.forEach(b => {
+            behaviors.forEach(b => {
                 const btn = document.createElement('button');
                 btn.className = 'behavior-item';
                 btn.onclick = () => applyBehavior(b);
                 btn.innerHTML = `<span>${b.icon} ${b.title}</span> <span style="color:${b.value > 0 ? '#10B981':'#EF4444'}">${b.value > 0 ? '+'+b.value : b.value}</span>`;
-                if (b.type === 'pos') pos.appendChild(btn); else neg.appendChild(btn);
+                if (b.type === 'pos' || b.value > 0) pos.appendChild(btn); else neg.appendChild(btn);
             });
         }
 
@@ -683,6 +775,7 @@
         function renderAll() {
             renderStudents();
             renderRoster();
+            renderBehaviorGrid();
             renderStore();
             renderBehaviors();
             renderLogs();
@@ -811,6 +904,7 @@
         function switchTab(tab) {
             document.getElementById('tab-tracker').style.display = tab === 'tracker' ? 'block' : 'none';
             document.getElementById('tab-roster').style.display = tab === 'roster' ? 'block' : 'none';
+            document.getElementById('tab-behaviors').style.display = tab === 'behaviors' ? 'block' : 'none';
             document.getElementById('tab-store').style.display = tab === 'store' ? 'block' : 'none';
             document.getElementById('tab-logs').style.display = tab === 'logs' ? 'block' : 'none';
 
@@ -818,12 +912,14 @@
                 btn.classList.toggle('active', 
                     (tab === 'tracker' && idx === 0) || 
                     (tab === 'roster' && idx === 1) || 
-                    (tab === 'store' && idx === 2) || 
-                    (tab === 'logs' && idx === 3)
+                    (tab === 'behaviors' && idx === 2) || 
+                    (tab === 'store' && idx === 3) || 
+                    (tab === 'logs' && idx === 4)
                 );
             });
 
             if (tab === 'roster') renderRoster();
+            if (tab === 'behaviors') renderBehaviorGrid();
             if (tab === 'store') renderStore();
             if (tab === 'logs') renderLogs();
         }
