@@ -409,7 +409,10 @@
             if (!GAS_URL) return;
             setSyncStatus(false, "與雲端同步中...");
             try {
-                const res = await fetch(GAS_URL);
+                const res = await fetch(GAS_URL + "?t=" + Date.now(), {
+    method: "GET",
+    cache: "no-store"
+});
                 const text = await res.text();
                 if (text && text.trim() !== "" && text !== "{}") {
                     const data = JSON.parse(text);
@@ -440,12 +443,48 @@
             if (!GAS_URL) return;
             setSyncStatus(false, "同步中...");
 
-            fetch(GAS_URL, {
-                method: "POST",
-                mode: "no-cors",
-                headers: { "Content-Type": "text/plain;charset=utf-8" },
-                body: JSON.stringify({ students, rewards, behaviors, logs })
-            }).then(() => {
+            async function saveData() {
+
+    try {
+
+        const data = {
+            students,
+            rewards,
+            behaviors,
+            logs
+        };
+
+        const response = await fetch(GAS_URL, {
+            method: "POST",
+            headers: {
+                "Content-Type": "text/plain;charset=utf-8"
+            },
+            body: JSON.stringify(data)
+        });
+
+        if (!response.ok) {
+            throw new Error("Google Apps Script 回應錯誤：" + response.status);
+        }
+
+        const result = await response.json();
+
+        if (result.status !== "success") {
+            throw new Error(result.message || "雲端儲存失敗");
+        }
+
+        setSyncStatus(true, "已成功儲存至雲端試算表");
+
+        return true;
+
+    } catch (error) {
+
+        console.error("儲存失敗:", error);
+
+        setSyncStatus(false, "雲端儲存失敗");
+
+        return false;
+    }
+}.then(() => {
                 setSyncStatus(true, "已連線至雲端試算表");
             }).catch(err => {
                 console.error("同步失敗:", err);
@@ -989,7 +1028,7 @@
             });
         }
 
-        function applyBehavior(behaviorId) {
+       async function applyBehavior(behaviorId) {
             const b = behaviors.find(x => x.id === behaviorId);
             if (!b) return;
 
@@ -1015,10 +1054,12 @@
                 });
             }
 
-            playSound(b.value > 0);
-            saveData();
-            renderAll();
-            closeModal('behavior-modal');
+           playSound(b.value > 0);
+
+const saved = await saveData();
+
+renderAll();
+closeModal('behavior-modal');
         }
 
         function closeModal(modalId) {
