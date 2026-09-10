@@ -129,6 +129,7 @@
         <div style="display: flex; align-items: center; gap: 1rem;">
             <div class="logo">👦3C的小天地👧</div>
             <div class="sync-status"><span class="sync-dot" id="sync-dot"></span><span id="sync-text">雲端未同步</span></div>
+            <button id="cloud-test-btn" class="nav-btn" onclick="testCloudSync()" title="測試 Google Sheet A1 是否可以寫入及讀回">測試雲端同步</button>
         </div>
         <nav>
             <button class="nav-btn active" onclick="switchTab('tracker')">加扣分專區</button>
@@ -499,6 +500,113 @@
             try { return await saveQueue; } catch (_) { return false; }
         }
 
+        /*
+         * 雲端寫入診斷：
+         * 1. 先 GET A1 保存原始內容
+         * 2. POST 一筆帶有唯一測試標記的資料
+         * 3. 再 GET A1 驗證標記是否真的寫入
+         * 4. 最後 POST 原始內容還原 A1，避免測試資料留在正式資料中
+         * 注意：POST 使用 no-cors，所以不能直接讀 POST 回應；真正的成功判斷以之後 GET 到的 A1 為準。
+         */
+        async function testCloudSync() {
+            const btn = document.getElementById('cloud-test-btn');
+            if (!GAS_URL) {
+                alert('尚未設定 Google Apps Script URL。');
+                return;
+            }
+
+            if (btn) {
+                btn.disabled = true;
+                btn.innerText = '測試中...';
+            }
+            setSyncStatus(false, '正在測試雲端寫入...');
+
+            const makeGetUrl = () => GAS_URL + (GAS_URL.includes('?') ? '&' : '?') + 'test=' + Date.now() + '_' + Math.random().toString(36).slice(2);
+
+            async function getCloudRaw() {
+                const res = await fetch(makeGetUrl(), { method: 'GET', cache: 'no-store' });
+                if (!res.ok) throw new Error('GET HTTP ' + res.status);
+                return await res.text();
+            }
+
+            async function postRaw(raw) {
+                await fetch(GAS_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: raw
+                });
+            }
+
+            async function waitAndGet(expectedMarker, attempts = 6) {
+                let lastRaw = '';
+                for (let i = 0; i < attempts; i++) {
+                    await new Promise(resolve => setTimeout(resolve, i === 0 ? 700 : 1000));
+                    lastRaw = await getCloudRaw();
+                    try {
+                        const parsed = JSON.parse(lastRaw);
+                        if (parsed && parsed.__cloudSyncTest === expectedMarker) return { ok: true, raw: lastRaw };
+                    } catch (_) {}
+                }
+                return { ok: false, raw: lastRaw };
+            }
+
+            let originalRaw = null;
+            let testSucceeded = false;
+
+            try {
+                originalRaw = await getCloudRaw();
+                if (!originalRaw || !originalRaw.trim()) throw new Error('A1 目前沒有資料');
+
+                const marker = 'TEST_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+                let originalParsed;
+                try {
+                    originalParsed = JSON.parse(originalRaw);
+                } catch (e) {
+                    throw new Error('A1 內容不是有效 JSON，無法安全進行測試。');
+                }
+
+                const testPayload = JSON.stringify({
+                    __cloudSyncTest: marker,
+                    __cloudSyncTestTime: new Date().toISOString(),
+                    originalDataType: Array.isArray(originalParsed) ? 'array' : typeof originalParsed
+                });
+
+                await postRaw(testPayload);
+                const verification = await waitAndGet(marker);
+
+                if (!verification.ok) {
+                    throw new Error('POST 後重新讀取 A1，未找到測試標記。');
+                }
+
+                testSucceeded = true;
+                setSyncStatus(true, '雲端寫入測試成功');
+                alert('🟢 雲端同步測試成功！\n\n已確認：網頁 → GAS POST → Google Sheet A1 → GET 讀回，整條流程正常。\n\n現在會自動還原原本的 A1 資料。');
+            } catch (err) {
+                console.error('雲端同步測試失敗:', err);
+                setSyncStatus(false, '雲端寫入測試失敗');
+                alert('🔴 雲端同步測試失敗。\n\n原因：' + (err && err.message ? err.message : err) + '\n\n請按 F12 → Console 查看詳細錯誤。');
+            } finally {
+                // 無論測試成功或失敗，只要取得過原始 A1，就嘗試還原。
+                if (originalRaw !== null) {
+                    try {
+                        await postRaw(originalRaw);
+                        // 等待還原寫入完成，避免使用者立即重新整理時仍看到測試資料。
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                    } catch (restoreErr) {
+                        console.error('測試後還原 A1 失敗:', restoreErr);
+                        alert('⚠️ 測試完成，但原本的 A1 資料未能確認還原，請暫時不要再操作並檢查 Google Sheet A1。');
+                    }
+                }
+
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerText = '測試雲端同步';
+                }
+                if (testSucceeded) setSyncStatus(true, '雲端同步正常');
+            }
+        }
+
         async function resetAllData() {
             if (confirm('確定要將所有學生、加扣分項目與獎勵清單重置回預設值嗎？')) {
                 localStorage.removeItem('v5_students');
@@ -567,7 +675,7 @@
             const file = e.target.files[0];
             if (!file) return;
             const reader = new FileReader();
-            reader.onload = function(evt) {
+            reader.onload = async function(evt) {
                 try {
                     const data = new Uint8Array(evt.target.result);
                     const workbook = XLSX.read(data, { type: 'array' });
@@ -603,7 +711,7 @@
             const file = e.target.files[0];
             if (!file) return;
             const reader = new FileReader();
-            reader.onload = function(evt) {
+            reader.onload = async function(evt) {
                 try {
                     const data = new Uint8Array(evt.target.result);
                     const workbook = XLSX.read(data, { type: 'array' });
