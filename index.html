@@ -393,106 +393,113 @@
         let currentRewardForRedeem = null;
 
         /* 雲端資料同步機制 */
+        let saveQueue = Promise.resolve();
+        let cloudSyncVersion = 0;
+
         function setSyncStatus(isSynced, text) {
             const dot = document.getElementById('sync-dot');
             const label = document.getElementById('sync-text');
             if (isSynced) {
                 dot.classList.add('active');
-                label.innerText = text || "已連線至雲端試算表";
+                label.innerText = text || "已成功同步至雲端試算表";
             } else {
                 dot.classList.remove('active');
-                label.innerText = text || "正在連線雲端...";
+                label.innerText = text || "正在同步雲端...";
             }
         }
 
         async function loadDataFromCloud() {
             if (!GAS_URL) return;
             setSyncStatus(false, "與雲端同步中...");
+
             try {
-                const res = await fetch(GAS_URL + "?t=" + Date.now(), {
-    method: "GET",
-    cache: "no-store"
-});
+                // 加時間戳 + no-store，避免重新整理時讀到舊的 GET cache
+                const url = GAS_URL + (GAS_URL.includes('?') ? '&' : '?') + 't=' + Date.now();
+                const res = await fetch(url, {
+                    method: 'GET',
+                    cache: 'no-store'
+                });
+
+                if (!res.ok) throw new Error('雲端讀取 HTTP ' + res.status);
+
                 const text = await res.text();
-                if (text && text.trim() !== "" && text !== "{}") {
-                    const data = JSON.parse(text);
-                    if (data.students && data.students.length > 0) students = data.students;
-                    if (data.rewards && data.rewards.length > 0) rewards = data.rewards;
-                    if (data.behaviors && data.behaviors.length > 0) behaviors = data.behaviors;
-                    if (data.logs) logs = data.logs;
-                    
-                    localStorage.setItem('v5_students', JSON.stringify(students));
-                    localStorage.setItem('v5_rewards', JSON.stringify(rewards));
-                    localStorage.setItem('v5_behaviors', JSON.stringify(behaviors));
-                    localStorage.setItem('v5_logs', JSON.stringify(logs));
-                    renderAll();
+                if (!text || text.trim() === '' || text.trim() === '{}') {
+                    setSyncStatus(true, '雲端目前沒有資料');
+                    return;
                 }
-                setSyncStatus(true, "已連線至雲端試算表");
+
+                const data = JSON.parse(text);
+                if (data.status === 'error') throw new Error(data.message || 'Apps Script 讀取失敗');
+
+                if (Array.isArray(data.students) && data.students.length > 0) students = data.students;
+                if (Array.isArray(data.rewards) && data.rewards.length > 0) rewards = data.rewards;
+                if (Array.isArray(data.behaviors) && data.behaviors.length > 0) behaviors = data.behaviors;
+                if (Array.isArray(data.logs)) logs = data.logs;
+
+                localStorage.setItem('v5_students', JSON.stringify(students));
+                localStorage.setItem('v5_rewards', JSON.stringify(rewards));
+                localStorage.setItem('v5_behaviors', JSON.stringify(behaviors));
+                localStorage.setItem('v5_logs', JSON.stringify(logs));
+
+                renderAll();
+                setSyncStatus(true, '已載入雲端最新資料');
             } catch (e) {
-                console.error("雲端載入失敗，使用本機紀錄", e);
-                setSyncStatus(false, "離線模式（僅在本機）");
+                console.error('雲端載入失敗，使用本機紀錄', e);
+                setSyncStatus(false, '離線模式（使用本機紀錄）');
             }
         }
 
         function saveData() {
+            // 先即時保存到本機，避免網絡中斷時資料消失
             localStorage.setItem('v5_students', JSON.stringify(students));
             localStorage.setItem('v5_rewards', JSON.stringify(rewards));
             localStorage.setItem('v5_behaviors', JSON.stringify(behaviors));
             localStorage.setItem('v5_logs', JSON.stringify(logs));
 
-            if (!GAS_URL) return;
-            setSyncStatus(false, "同步中...");
+            if (!GAS_URL) return Promise.resolve(false);
 
-            async function saveData() {
+            // 將快速連續操作排隊，避免多個 POST 同時寫入 A1 而互相覆蓋
+            const payload = JSON.stringify({ students, rewards, behaviors, logs });
+            const version = ++cloudSyncVersion;
 
-    try {
+            saveQueue = saveQueue
+                .catch(() => false)
+                .then(() => sendDataToCloud(payload, version));
 
-        const data = {
-            students,
-            rewards,
-            behaviors,
-            logs
-        };
-
-        const response = await fetch(GAS_URL, {
-            method: "POST",
-            headers: {
-                "Content-Type": "text/plain;charset=utf-8"
-            },
-            body: JSON.stringify(data)
-        });
-
-        if (!response.ok) {
-            throw new Error("Google Apps Script 回應錯誤：" + response.status);
+            return saveQueue;
         }
 
-        const result = await response.json();
+        async function sendDataToCloud(payload, version) {
+            setSyncStatus(false, '同步中...');
 
-        if (result.status !== "success") {
-            throw new Error(result.message || "雲端儲存失敗");
+            try {
+                // GitHub Pages 與 Apps Script 屬跨來源請求；使用 no-cors 避免 CORS 預檢問題。
+                // await 會等到瀏覽器完成這次網絡請求，避免立即重新整理造成舊資料覆蓋。
+                await fetch(GAS_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: payload
+                });
+
+                if (version === cloudSyncVersion) {
+                    setSyncStatus(true, '已成功送出雲端儲存');
+                }
+                return true;
+            } catch (err) {
+                console.error('同步失敗:', err);
+                if (version === cloudSyncVersion) {
+                    setSyncStatus(false, '同步失敗（已保留本機紀錄）');
+                }
+                return false;
+            }
         }
 
-        setSyncStatus(true, "已成功儲存至雲端試算表");
-
-        return true;
-
-    } catch (error) {
-
-        console.error("儲存失敗:", error);
-
-        setSyncStatus(false, "雲端儲存失敗");
-
-        return false;
-    }
-}.then(() => {
-                setSyncStatus(true, "已連線至雲端試算表");
-            }).catch(err => {
-                console.error("同步失敗:", err);
-                setSyncStatus(false, "同步失敗 (僅存於本機)");
-            });
+        async function waitForCloudSave() {
+            try { return await saveQueue; } catch (_) { return false; }
         }
 
-        function resetAllData() {
+        async function resetAllData() {
             if (confirm('確定要將所有學生、加扣分項目與獎勵清單重置回預設值嗎？')) {
                 localStorage.removeItem('v5_students');
                 localStorage.removeItem('v5_rewards');
@@ -503,8 +510,8 @@
                 behaviors = JSON.parse(JSON.stringify(DEFAULT_BEHAVIORS));
                 logs = [];
                 selectedStudentIds.clear();
-                saveData();
                 renderAll();
+                await saveData();
             }
         }
 
@@ -556,7 +563,7 @@
         }
 
         /* Excel - 學生名冊匯入/匯出 */
-        function importExcel(e) {
+        async function importExcel(e) {
             const file = e.target.files[0];
             if (!file) return;
             const reader = new FileReader();
@@ -574,7 +581,7 @@
                         currentPoints: Number(item['目前點數'] ?? 10),
                         lifetimePoints: Number(item['總點數'] ?? 20)
                     }));
-                    saveData(); renderAll();
+                    await saveData(); renderAll();
                     alert(`成功從 Excel 匯入 ${students.length} 位學生名單！`);
                 } catch (err) { alert('匯入失敗，請確認格式！'); }
             };
@@ -592,7 +599,7 @@
         }
 
         /* Excel - 獎勵商城匯入/匯出 */
-        function importRewardsExcel(e) {
+        async function importRewardsExcel(e) {
             const file = e.target.files[0];
             if (!file) return;
             const reader = new FileReader();
@@ -609,7 +616,7 @@
                         icon: item['圖示 Icon'] || item['圖示'] || '🎁',
                         cost: Number(item['所需點數'] ?? 10)
                     }));
-                    saveData(); renderStore();
+                    await saveData(); renderStore();
                     alert(`成功從 Excel 匯入 ${rewards.length} 項獎勵商品！`);
                 } catch (err) { alert('匯入失敗，請確認格式！'); }
             };
@@ -715,16 +722,16 @@
             });
         }
 
-        function updateStudent(id, key, val) {
+        async function updateStudent(id, key, val) {
             const s = students.find(x => x.id === id);
             if (s) {
                 s[key] = val;
-                saveData();
+                await saveData();
                 renderStudents();
             }
         }
 
-        function addStudent() {
+        async function addStudent() {
             const avatar = document.getElementById('new-avatar').value;
             const nameInput = document.getElementById('new-name');
             const name = nameInput.value.trim();
@@ -739,15 +746,15 @@
                 lifetimePoints: 10
             });
             nameInput.value = '';
-            saveData();
+            await saveData();
             renderAll();
         }
 
-        function deleteStudent(id) {
+        async function deleteStudent(id) {
             if (confirm('確定要刪除這位學生嗎？')) {
                 students = students.filter(s => s.id !== id);
                 selectedStudentIds.delete(id);
-                saveData();
+                await saveData();
                 renderAll();
             }
         }
@@ -772,7 +779,7 @@
             });
         }
 
-        function addBehaviorItem() {
+        async function addBehaviorItem() {
             const icon = document.getElementById('new-behavior-icon').value;
             const type = document.getElementById('new-behavior-type').value;
             const title = document.getElementById('new-behavior-title').value.trim();
@@ -792,14 +799,14 @@
             });
 
             document.getElementById('new-behavior-title').value = '';
-            saveData();
+            await saveData();
             renderBehaviors();
         }
 
-        function deleteBehavior(id) {
+        async function deleteBehavior(id) {
             if (confirm('確定要刪除這個加扣分項目嗎？')) {
                 behaviors = behaviors.filter(b => b.id !== id);
-                saveData();
+                await saveData();
                 renderBehaviors();
             }
         }
@@ -823,7 +830,7 @@
             });
         }
 
-        function addReward() {
+        async function addReward() {
             const icon = document.getElementById('new-reward-icon').value;
             const title = document.getElementById('new-reward-title').value.trim();
             const cost = Number(document.getElementById('new-reward-cost').value);
@@ -840,14 +847,14 @@
 
             document.getElementById('new-reward-title').value = '';
             document.getElementById('new-reward-cost').value = '';
-            saveData();
+            await saveData();
             renderStore();
         }
 
-        function deleteReward(id) {
+        async function deleteReward(id) {
             if (confirm('確定要刪除這項獎勵品項嗎？')) {
                 rewards = rewards.filter(r => r.id !== id);
-                saveData();
+                await saveData();
                 renderStore();
             }
         }
@@ -883,7 +890,7 @@
             document.getElementById('redeem-modal').classList.add('active');
         }
 
-        function redeemReward(studentId) {
+        async function redeemReward(studentId) {
             if (!currentRewardForRedeem) return;
             const s = students.find(x => x.id === studentId);
             if (!s) return;
@@ -895,7 +902,7 @@
             s.currentPoints -= currentRewardForRedeem.cost;
             addLog(s.name, `兌換獎勵：${currentRewardForRedeem.icon} ${currentRewardForRedeem.title}`, -currentRewardForRedeem.cost);
             playSound(false);
-            saveData();
+            await saveData();
             renderAll();
             closeModal('redeem-modal');
             alert(`成功幫 ${s.name} 兌換「${currentRewardForRedeem.title}」！`);
@@ -959,7 +966,7 @@
             renderStudents();
         }
 
-        function quickPoint(id, delta, event) {
+        async function quickPoint(id, delta, event) {
             if (event) event.stopPropagation();
             const s = students.find(x => x.id === id);
             if (!s) return;
@@ -968,13 +975,13 @@
             const reason = delta > 0 ? '快速加分' : '快速扣分';
             addLog(s.name, reason, delta);
             playSound(delta > 0);
-            saveData();
+            await saveData();
             renderStudents();
             const card = document.getElementById(`card-${id}`);
             showAnim(card, (delta > 0 ? '+' : '') + delta, delta > 0);
         }
 
-        function quickAll(delta) {
+        async function quickAll(delta) {
             if (students.length === 0) return;
             students.forEach(s => {
                 s.currentPoints += delta;
@@ -982,7 +989,7 @@
                 addLog(s.name, '全班加分', delta);
             });
             playSound(delta > 0);
-            saveData();
+            await saveData();
             renderStudents();
         }
 
@@ -1028,7 +1035,7 @@
             });
         }
 
-       async function applyBehavior(behaviorId) {
+        async function applyBehavior(behaviorId) {
             const b = behaviors.find(x => x.id === behaviorId);
             if (!b) return;
 
@@ -1054,12 +1061,10 @@
                 });
             }
 
-           playSound(b.value > 0);
-
-const saved = await saveData();
-
-renderAll();
-closeModal('behavior-modal');
+            playSound(b.value > 0);
+            await saveData();
+            renderAll();
+            closeModal('behavior-modal');
         }
 
         function closeModal(modalId) {
