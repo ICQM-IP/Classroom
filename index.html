@@ -121,6 +121,43 @@
             100% { opacity: 0; transform: translateY(-30px); }
         }
         .anim-tag { position: absolute; top: 15%; left: 50%; transform: translateX(-50%); font-weight: 800; font-size: 1.2rem; pointer-events: none; animation: popUp 0.7s forwards; }
+
+        /* Compact classroom: seven columns, five rows; seating never writes score data. */
+        header { flex-wrap: wrap; gap: .5rem; padding: .6rem 1rem; }
+        nav { flex-wrap: wrap; }
+        .container { max-width: 1600px; margin: .6rem auto; }
+        #tab-tracker .toolbar { padding: .5rem .75rem; margin-bottom: .5rem; }
+        .classroom-heading { display:flex; align-items:center; justify-content:space-between; gap:.5rem; margin-bottom:.5rem; flex-wrap:wrap; }
+        .classroom-heading h1 { font-size:1.15rem; }
+        .seat-help { font-size:.8rem; color:var(--text-muted); }
+        .classroom { background:#edf2f7; padding:.6rem; border:1px solid #dce3ed; border-radius:1rem; overflow-x:auto; }
+        .student-grid { grid-template-columns:repeat(7,minmax(0,1fr)); grid-template-rows:repeat(5,minmax(82px,1fr)); gap:clamp(5px, .8vh, 10px); height:calc(100dvh - 280px); min-height:400px; min-width:700px; }
+        .seat { position:relative; min-width:0; border-radius:.65rem; }
+        .seat.empty { border:1px dashed #bdc9d9; display:flex; align-items:center; justify-content:center; color:#8190a5; font-size:.8rem; }
+        .seat.drop-target { outline:3px solid var(--primary); outline-offset:1px; }
+        .student-card { height:100%; padding:4px 6px; display:grid; grid-template-columns:30px 1fr; grid-template-rows:1fr 1fr 28px; align-items:center; column-gap:4px; border-radius:.65rem; }
+        .student-card:hover { transform:none; }
+        .student-card .avatar { font-size:1.5rem; margin:0; grid-row:1 / 3; }
+        .student-card .name { margin:0 20px 0 0; font-size:clamp(12px,1.1vw,16px); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:left; }
+        .student-card .pts-container { margin:0; justify-content:flex-start; }
+        .student-card .curr-pt { font-size:clamp(14px,1.35vw,20px)!important; padding:0 8px!important; }
+        .student-card .card-checkbox { top:6px; right:6px; left:auto; width:15px; height:15px; }
+        .student-card .quick-btns { grid-column:1 / 3; justify-content:stretch; }
+        .student-card .quick-btn { flex:1; padding:3px; }
+        .seat-number { position:absolute; left:5px; top:3px; font-size:9px; color:#94a3b8; pointer-events:none; }
+        .arranging .student-card { cursor:grab; border-style:dashed; }
+        .arranging .student-card:active { cursor:grabbing; }
+        .arranging .student-card.picked { outline:3px solid #f59e0b; }
+        .arranging .quick-btns, .arranging .card-checkbox { visibility:hidden; }
+        .student-card:focus-visible, .seat:focus-visible { outline:3px solid #f59e0b; }
+        .classroom-footer { display:flex; justify-content:space-between; align-items:center; gap:1rem; margin-top:.5rem; min-width:700px; }
+        .teacher-desk { display:flex; align-items:center; gap:.65rem; background:#fff5df; border:1px solid #e9cf92; border-bottom:4px solid #d9b96f; border-radius:.6rem; padding:.45rem .7rem; }
+        .teacher-desk label { display:flex; align-items:center; gap:.3rem; }
+        .teacher-desk input { width:90px; padding:.25rem; background:white; }
+        #seat-overflow { display:grid; grid-template-columns:repeat(7,minmax(100px,1fr)); gap:.5rem; }
+        #seat-overflow:not(:empty) { margin-top:.7rem; }
+        #seat-overflow .seat { height:100px; }
+        @media (max-width:800px) { header { position:static; } .classroom-heading { align-items:flex-start; } .student-grid { height:500px; } .container { padding:0 .5rem; } }
     </style>
 </head>
 <body>
@@ -157,7 +194,22 @@
                     <button class="btn btn-outline" onclick="exportStudentsExcel()">📥 匯出名冊 Excel</button>
                 </div>
             </div>
-            <div class="student-grid" id="student-grid"></div>
+            <div class="classroom-heading">
+                <div><h1>班級座位表 <span class="seat-help">7 欄 × 5 排</span></h1><p class="seat-help" id="seat-status" role="status">點選學生計分；按「調整座位」拖曳換位。</p></div>
+                <button class="btn btn-outline" id="seat-edit" onclick="toggleSeatEdit()" aria-pressed="false">調整座位</button>
+            </div>
+            <div class="classroom">
+                <div class="student-grid" id="student-grid" aria-label="7 欄 5 排學生座位表"></div>
+                <div class="classroom-footer">
+                    <span class="seat-help">座位及老師姓名儲存在此瀏覽器</span>
+                    <div class="teacher-desk" aria-label="兩人老師桌"><strong>老師桌</strong>
+                        <label>🧑‍🏫 <input id="teacher-0" aria-label="第一位老師姓名" placeholder="老師 1" maxlength="20" onchange="saveTeacherNames()"></label>
+                        <label>🧑‍🏫 <input id="teacher-1" aria-label="第二位老師姓名" placeholder="老師 2" maxlength="20" onchange="saveTeacherNames()"></label>
+                    </div>
+                </div>
+            </div>
+            <p id="overflow-label" class="seat-help" hidden>待安排學生（35 個座位已滿，可拖曳至座位交換）</p>
+            <div id="seat-overflow"></div>
         </div>
 
         <!-- 頁籤 2: 學生名冊管理 -->
@@ -721,36 +773,133 @@
             renderAll();
         }
 
-        /* 渲染畫面 - 學生卡片 (加扣分專區) */
-        function renderStudents() {
-            const grid = document.getElementById('student-grid');
-            grid.innerHTML = '';
-
-            students.forEach(s => {
-                const isSelected = selectedStudentIds.has(s.id);
-                const card = document.createElement('div');
-                card.className = `student-card ${isSelected ? 'selected' : ''}`;
-                card.id = `card-${s.id}`;
-                card.onclick = (e) => {
-                    if (e.target.tagName !== 'INPUT' && !e.target.classList.contains('quick-btn')) openSingleModal(s.id);
-                };
-
-                card.innerHTML = `
-                    <input type="checkbox" class="card-checkbox" ${isSelected ? 'checked' : ''} onchange="toggleSelect(${s.id}, event)">
-                    <div class="avatar">${s.avatar}</div>
-                    <div class="name">${s.name}</div>
-                    <div class="pts-container">
-                        <span class="pt-badge curr-pt" style="font-size: 1.2rem; font-weight: bold; padding: 4px 10px;">${s.currentPoints} pts</span>
-                    </div>
-                    <div class="quick-btns">
-                        <button class="quick-btn q-add" onclick="quickPoint(${s.id}, 1, event)">+1</button>
-                        <button class="quick-btn q-sub" onclick="quickPoint(${s.id}, -1, event)">-1</button>
-                    </div>
-                `;
-                grid.appendChild(card);
+        // Separate UI-only storage: never call saveData or mutate students here.
+        const SEATING_KEY = 'classroom_seating_v1';
+        const TEACHERS_KEY = 'classroom_teachers_v1';
+        function readLayout(key) {
+            try { const value = JSON.parse(localStorage.getItem(key)); return Array.isArray(value) ? value : []; }
+            catch (_) { return []; }
+        }
+        let seatIds = readLayout(SEATING_KEY);
+        let seatEditing = false;
+        let pickedStudentId = null;
+        let draggingStudentId = null;
+        function reconcileSeats() {
+            const valid = new Set(students.map(s => String(s.id)));
+            const used = new Set();
+            seatIds = Array.from({length:35}, (_, i) => {
+                const id = seatIds[i] == null ? null : String(seatIds[i]);
+                if (!valid.has(id) || used.has(id)) return null;
+                used.add(id); return id;
             });
-
+            students.forEach(s => {
+                const id = String(s.id), empty = seatIds.indexOf(null);
+                if (!used.has(id) && empty !== -1) { seatIds[empty] = id; used.add(id); }
+            });
+        }
+        function saveLayout(key, value) {
+            try { localStorage.setItem(key, JSON.stringify(value)); return true; }
+            catch (_) { document.getElementById('seat-status').textContent = '瀏覽器未能儲存位置，重新整理後可能遺失本次安排。'; return false; }
+        }
+        function saveTeacherNames() {
+            saveLayout(TEACHERS_KEY, [0,1].map(i => document.getElementById('teacher-'+i).value));
+        }
+        function toggleSeatEdit() {
+            seatEditing = !seatEditing; pickedStudentId = null; draggingStudentId = null;
+            document.getElementById('seat-edit').textContent = seatEditing ? '完成座位安排' : '調整座位';
+            document.getElementById('seat-edit').setAttribute('aria-pressed', String(seatEditing));
+            document.getElementById('seat-status').textContent = seatEditing ? '拖曳學生換位；也可先點學生，再點目的座位。位置自動儲存，分數保持不變。' : '點選學生計分；按「調整座位」拖曳換位。';
+            renderStudents();
+        }
+        function moveToSeat(id, target) {
+            if (!seatEditing || id == null || !students.some(s => String(s.id) === id)) return;
+            reconcileSeats();
+            const from = seatIds.indexOf(id);
+            if (!Number.isInteger(target) || target < 0 || target >= 35) return;
+            const displaced = seatIds[target];
+            seatIds[target] = id;
+            if (from !== -1) seatIds[from] = displaced;
+            pickedStudentId = null; draggingStudentId = null;
+            saveLayout(SEATING_KEY, seatIds);
+            renderStudents();
+        }
+        function renderStudents() {
+            reconcileSeats();
+            const grid = document.getElementById('student-grid');
+            const overflow = document.getElementById('seat-overflow');
+            grid.replaceChildren(); overflow.replaceChildren();
+            grid.classList.toggle('arranging', seatEditing);
+            overflow.classList.toggle('arranging', seatEditing);
+            function makeSeat(s, index) {
+                const seat = document.createElement('div');
+                seat.className = 'seat' + (s ? '' : ' empty');
+                const label = index == null ? '待安排' : `${Math.floor(index/7)+1} 排 ${index%7+1} 號`;
+                seat.setAttribute('aria-label', label);
+                if (seatEditing) {
+                    seat.tabIndex = 0;
+                    seat.setAttribute('role', 'button');
+                    seat.setAttribute('aria-label', label + (s ? ' '+s.name : ' 空位'));
+                }
+                const activate = () => {
+                    if (!seatEditing) return;
+                    if (pickedStudentId !== null && index != null) moveToSeat(pickedStudentId, index);
+                    else if (s) { pickedStudentId = String(s.id); renderStudents(); document.getElementById('seat-status').textContent = `已選取 ${s.name}，請點選目的座位。`; }
+                };
+                seat.onclick = activate;
+                seat.onkeydown = e => { if (seatEditing && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); activate(); } if (e.key === 'Escape') { pickedStudentId = null; renderStudents(); } };
+                seat.ondragover = e => { if (seatEditing && draggingStudentId !== null && index != null) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; seat.classList.add('drop-target'); } };
+                seat.ondragleave = () => seat.classList.remove('drop-target');
+                seat.ondrop = e => { e.preventDefault(); seat.classList.remove('drop-target'); if (index != null) moveToSeat(draggingStudentId, index); };
+                if (!s) { seat.textContent = label + ' · 空位'; return seat; }
+                const card = document.createElement('div');
+                card.className = 'student-card' + (selectedStudentIds.has(s.id) ? ' selected' : '') + (pickedStudentId === String(s.id) ? ' picked' : '');
+                card.id = `card-${s.id}`;
+                card.draggable = seatEditing;
+                card.ondragstart = e => { if (!seatEditing) { e.preventDefault(); return; } draggingStudentId = String(s.id); e.dataTransfer.setData('text/plain', String(s.id)); e.dataTransfer.effectAllowed = 'move'; };
+                card.ondragend = () => { draggingStudentId = null; document.querySelectorAll('.drop-target').forEach(el => el.classList.remove('drop-target')); };
+                // Pointer dragging also supports touch screens and trackpads.
+                card.style.touchAction = seatEditing ? 'none' : 'auto';
+                card.onpointerdown = e => {
+                    if (!seatEditing || e.button !== 0) return;
+                    const x = e.clientX, y = e.clientY;
+                    let moved = false;
+                    card.setPointerCapture(e.pointerId);
+                    card.onpointermove = ev => {
+                        if (Math.hypot(ev.clientX-x, ev.clientY-y) > 6) moved = true;
+                        if (!moved) return;
+                        document.querySelectorAll('.drop-target').forEach(el => el.classList.remove('drop-target'));
+                        const target = document.elementFromPoint(ev.clientX,ev.clientY)?.closest('#student-grid > .seat');
+                        if (target) target.classList.add('drop-target');
+                    };
+                    card.onpointerup = ev => {
+                        card.onpointermove = null; card.onpointerup = null;
+                        document.querySelectorAll('.drop-target').forEach(el => el.classList.remove('drop-target'));
+                        if (!moved) return;
+                        const target = document.elementFromPoint(ev.clientX,ev.clientY)?.closest('#student-grid > .seat');
+                        ev.preventDefault(); ev.stopPropagation();
+                        if (target) moveToSeat(String(s.id), Array.from(grid.children).indexOf(target));
+                    };
+                    card.onpointercancel = () => { card.onpointermove = null; card.onpointerup = null; document.querySelectorAll('.drop-target').forEach(el => el.classList.remove('drop-target')); };
+                };
+                card.draggable = false;
+                card.onclick = e => { if (!seatEditing && !e.target.closest('input,button')) openSingleModal(s.id); };
+                const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.className = 'card-checkbox'; checkbox.checked = selectedStudentIds.has(s.id); checkbox.disabled = seatEditing;
+                checkbox.setAttribute('aria-label', '選取 '+s.name); checkbox.onchange = e => toggleSelect(s.id,e);
+                const avatar = document.createElement('div'); avatar.className = 'avatar'; avatar.textContent = s.avatar;
+                const name = document.createElement('div'); name.className = 'name'; name.textContent = s.name; name.title = s.name;
+                const points = document.createElement('div'); points.className = 'pts-container';
+                const badge = document.createElement('span'); badge.className = 'pt-badge curr-pt'; badge.textContent = s.currentPoints+' pts'; points.append(badge);
+                const buttons = document.createElement('div'); buttons.className = 'quick-btns';
+                [1,-1].forEach(delta => { const btn = document.createElement('button'); btn.className = 'quick-btn '+(delta===1?'q-add':'q-sub'); btn.textContent = delta===1?'+1':'−1'; btn.disabled=seatEditing; btn.setAttribute('aria-label',s.name+(delta===1?' 加 1 分':' 扣 1 分')); btn.onclick = e => { if (!seatEditing) quickPoint(s.id,delta,e); }; buttons.append(btn); });
+                card.append(checkbox,avatar,name,points,buttons); seat.append(card); return seat;
+            }
+            seatIds.forEach((id,index) => grid.append(makeSeat(students.find(s => String(s.id) === id),index)));
+            const extras = students.filter(s => !seatIds.includes(String(s.id)));
+            extras.forEach(s => overflow.append(makeSeat(s,null)));
+            document.getElementById('overflow-label').hidden = extras.length === 0;
             document.getElementById('select-cnt').innerText = selectedStudentIds.size;
+            const teachers = readLayout(TEACHERS_KEY);
+            [0,1].forEach(i => { const input = document.getElementById('teacher-'+i); if (document.activeElement !== input) input.value = typeof teachers[i] === 'string' ? teachers[i] : ''; });
         }
 
         /* 渲染畫面 - 學生名冊 */
