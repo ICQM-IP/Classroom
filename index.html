@@ -671,7 +671,16 @@
                 });
 
                 if (version === cloudSyncVersion) {
-                    setSyncStatus(true, '已成功送出雲端儲存');
+                    const check = await fetch(GAS_URL + '?t=' + Date.now(), { cache: 'no-store' });
+                    if (!check.ok) throw new Error('無法確認雲端儲存');
+                    const saved = await check.json();
+                    const expected = JSON.parse(payload);
+                    if (version !== cloudSyncVersion) return true;
+                    if (!['students', 'rewards', 'behaviors', 'logs'].every(key => JSON.stringify(saved[key]) === JSON.stringify(expected[key]))) {
+                        setSyncStatus(false, '已保留本機；雲端內容尚未確認，請勿重新整理');
+                        return false;
+                    }
+                    setSyncStatus(true, '已儲存 · 雲端已確認');
                 }
                 return true;
             } catch (err) {
@@ -1179,6 +1188,7 @@
         function catalogDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }
         async function catalogDrop(e, type, targetId) {
             e.preventDefault();
+            if (document.querySelector('[data-dirty="true"]')) { alert('請先儲存修改，再拖曳排序。'); return; }
             if (!draggingCatalog || draggingCatalog.type !== type || draggingCatalog.id === targetId) return;
             const list = type === 'behavior' ? behaviors : rewards;
             const from = list.findIndex(x => x.id === draggingCatalog.id);
@@ -1223,6 +1233,7 @@
             if (!title) return alert('請輸入項目名稱！');
             if (!Number.isFinite(pts) || pts <= 0) return alert('請輸入大於 0 的分數！');
             b.title = title; b.icon = icon; b.type = type; b.value = type === 'neg' ? -Math.abs(pts) : Math.abs(pts);
+            delete card.dataset.dirty;
             await saveData(); renderBehaviors();
         }
 
@@ -1291,6 +1302,7 @@
             if (!title) return alert('請輸入獎勵名稱！');
             if (!Number.isFinite(cost) || cost <= 0) return alert('請輸入大於 0 的所需點數！');
             r.title = title; r.icon = icon; r.cost = cost;
+            delete card.dataset.dirty;
             await saveData(); renderStore();
         }
 
@@ -1549,5 +1561,6 @@
             loadDataFromCloud();
         });
     </script>
+    <script src="improvements.js?v=20260927"></script>
 </body>
 </html>
