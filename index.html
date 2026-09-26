@@ -1,1 +1,1471 @@
-Save numeric seat assignments through the dedicated Google Sheet seating endpoint with conflict detection and verified readback. Add draggable Mr. IP and Ms. Lam cards at the two-person teacher desk. Enlarge avatars, names and points with a green classroom layout. Existing score operations remain unchanged; verified live seat initialization preserves all score and history data.
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3C的小天地</title>
+    <!-- 引入 SheetJS 函式庫 -->
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <style>
+        :root {
+            --primary: #4F46E5;
+            --primary-hover: #4338CA;
+            --success: #10B981;
+            --danger: #EF4444;
+            --bg-slate: #F8FAFC;
+            --text-main: #1E293B;
+            --text-muted: #64748B;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+        body { background-color: var(--bg-slate); color: var(--text-main); min-height: 100vh; }
+
+        /* Header & Nav */
+        header {
+            background: #ffffff; border-bottom: 1px solid #E2E8F0; padding: 1rem 2rem;
+            display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 10;
+        }
+        .logo { font-size: 1.25rem; font-weight: bold; display: flex; align-items: center; gap: 0.5rem; }
+        .sync-status { font-size: 0.8rem; color: var(--text-muted); display: flex; align-items: center; gap: 0.3rem; }
+        .sync-dot { width: 8px; height: 8px; border-radius: 50%; background-color: #CBD5E1; }
+        .sync-dot.active { background-color: var(--success); }
+
+        nav { display: flex; gap: 0.5rem; background: #F1F5F9; padding: 0.25rem; border-radius: 0.5rem; }
+        .nav-btn {
+            padding: 0.5rem 1rem; border: none; background: transparent; border-radius: 0.375rem;
+            font-weight: 600; color: var(--text-muted); cursor: pointer; transition: all 0.2s;
+        }
+        .nav-btn.active { background: #ffffff; color: var(--primary); box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+
+        /* Main Container */
+        .container { max-width: 1100px; margin: 1.5rem auto; padding: 0 1rem; }
+
+        /* Toolbar */
+        .toolbar {
+            display: flex; justify-content: space-between; align-items: center;
+            background: white; padding: 1rem; border-radius: 0.75rem; border: 1px solid #E2E8F0;
+            margin-bottom: 1.5rem; flex-wrap: wrap; gap: 0.75rem;
+        }
+        .btn-group { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+        .btn {
+            padding: 0.5rem 1rem; border: 1px solid transparent; border-radius: 0.5rem;
+            font-weight: 600; cursor: pointer; font-size: 0.9rem; transition: background 0.15s;
+            display: inline-flex; align-items: center; gap: 0.3rem;
+        }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: var(--primary-hover); }
+        .btn-success { background: var(--success); color: white; }
+        .btn-outline { background: white; border-color: #CBD5E1; color: var(--text-main); }
+        .btn-outline:hover { background: #F8FAFC; }
+        .btn-danger-link { background: transparent; border: none; color: var(--danger); cursor: pointer; font-size: 0.85rem; text-decoration: underline; }
+
+        /* Student Grid */
+        .student-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 1rem; }
+        .student-card {
+            background: white; border-radius: 0.75rem; padding: 1rem; text-align: center;
+            border: 2px solid #E2E8F0; cursor: pointer; transition: all 0.2s; position: relative;
+        }
+        .student-card:hover { border-color: #A5B4FC; transform: translateY(-2px); }
+        .student-card.selected { border-color: var(--primary); background-color: #EEF2FF; }
+        
+        .card-checkbox { position: absolute; top: 0.75rem; left: 0.75rem; width: 18px; height: 18px; cursor: pointer; }
+        .avatar { font-size: 2.8rem; margin-bottom: 0.25rem; }
+        .name { font-weight: 700; font-size: 1rem; margin-bottom: 0.5rem; }
+        
+        .pts-container { display: flex; justify-content: center; gap: 0.3rem; margin-bottom: 0.75rem; font-size: 0.8rem; font-weight: 700; }
+        .pt-badge { padding: 0.2rem 0.5rem; border-radius: 1rem; }
+        .curr-pt { background: #E0E7FF; color: var(--primary); }
+
+        .quick-btns { display: flex; gap: 0.25rem; justify-content: center; }
+        .quick-btn { border: none; padding: 0.25rem 0.6rem; border-radius: 0.375rem; font-weight: bold; cursor: pointer; font-size: 0.85rem; }
+        .q-add { background: #D1FAE5; color: #047857; }
+        .q-sub { background: #FEE2E2; color: #B91C1C; }
+
+        /* Store & Roster & Behavior Management */
+        .store-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 1rem; }
+        .store-card { background: white; border-radius: 0.75rem; padding: 1.25rem; border: 1px solid #E2E8F0; text-align: center; position: relative; }
+        #behavior-grid .store-card, #store-grid .store-card { cursor: grab; text-align: left; transition: transform .18s, box-shadow .18s, opacity .18s; }
+        #behavior-grid .store-card:active, #store-grid .store-card:active { cursor: grabbing; }
+        .catalog-card.dragging { opacity: .45; transform: scale(.97); }
+        .catalog-head { display:flex; align-items:center; gap:.5rem; margin-bottom:.6rem; }
+        .catalog-grip { color:#94a3b8; font-size:1.25rem; letter-spacing:-.2rem; user-select:none; }
+        .catalog-icon-input { width:3.1rem; text-align:center; font-size:1.55rem; padding:.25rem; }
+        .catalog-edit-title { flex:1; min-width:0; font-weight:700; font-size:1rem; }
+        .catalog-edit-row { display:flex; gap:.45rem; align-items:center; margin:.45rem 0; }
+        .catalog-edit-row label { color:#64748b; font-size:.78rem; white-space:nowrap; }
+        .catalog-edit-row input, .catalog-edit-row select { width:100%; padding:.38rem .5rem; border:1px solid #cbd5e1; border-radius:.45rem; font:inherit; }
+        .catalog-edit-row input[type=number] { max-width:7rem; }
+        .catalog-actions { display:flex; gap:.45rem; margin-top:.65rem; }
+        .catalog-actions .btn { flex:1; font-size:.8rem; }
+        .catalog-hint { font-size:.72rem; color:#94a3b8; margin-top:.45rem; }
+        
+        .roster-card { background: white; border: 1px solid #E2E8F0; border-radius: 0.5rem; padding: 1rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.5rem; }
+        .roster-info { display: flex; align-items: center; gap: 1rem; flex-grow: 1; flex-wrap: wrap; }
+
+        .del-btn { position: absolute; top: 8px; right: 8px; background: none; border: none; color: #94A3B8; cursor: pointer; font-size: 14px; }
+        .del-btn:hover { color: var(--danger); }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4);
+            display: none; justify-content: center; align-items: center; z-index: 100;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal { background: white; padding: 1.5rem; border-radius: 1rem; width: 90%; max-width: 500px; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+        .close-btn { background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-muted); }
+        
+        .behavior-list { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 1rem; }
+        .behavior-item {
+            display: flex; justify-content: space-between; align-items: center; padding: 0.6rem 0.8rem;
+            border: 1px solid #E2E8F0; border-radius: 0.5rem; background: white; cursor: pointer; font-weight: 600;
+        }
+        .behavior-item:hover { border-color: var(--primary); background: #F8FAFC; }
+
+        table { width: 100%; border-collapse: collapse; background: white; border-radius: 0.5rem; overflow: hidden; }
+        th, td { padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid #E2E8F0; }
+        th { background: #F8FAFC; color: var(--text-muted); font-size: 0.85rem; }
+
+        input[type="text"], input[type="number"], select { padding: 0.5rem 0.75rem; border: 1px solid #CBD5E1; border-radius: 0.375rem; font-size: 0.9rem; outline: none; }
+        input:focus, select:focus { border-color: var(--primary); }
+
+        /* Float Anim */
+        @keyframes popUp {
+            0% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-30px); }
+        }
+        .anim-tag { position: absolute; top: 15%; left: 50%; transform: translateX(-50%); font-weight: 800; font-size: 1.2rem; pointer-events: none; animation: popUp 0.7s forwards; }
+
+        /* A calm, spacious classroom with a compact desktop overview. */
+        :root { --primary:#177c70; --primary-hover:#106459; --success:#258977; --bg-slate:#f5f6f2; --text-main:#243b3a; --text-muted:#778784; }
+        body { background:radial-gradient(ellipse at 15% 0%,#e7f1e9,transparent 45%),#f5f6f2; }
+        header { padding:10px 22px; gap:8px; flex-wrap:wrap; background:#ffffffed; box-shadow:0 3px 20px #244b3b05; border-color:#dfe8e3; }
+        .logo { color:#285a50; letter-spacing:.03em; font-size:21px; }
+        nav { background:#edf2ef; border-radius:12px; padding:4px; }
+        .nav-btn { font-size:13px; padding:7px 12px; border-radius:8px; }
+        .nav-btn.active { color:#146b60; box-shadow:0 2px 5px #26483d12; }
+        #cloud-test-btn { font-size:11px; }
+        .sync-status { font-size:11px; }
+        .container { max-width:1760px; margin:12px auto; padding:0 20px; }
+        #tab-tracker .toolbar { padding:7px 10px; margin-bottom:10px; border-radius:13px; border-color:#e1e8e2; box-shadow:0 3px 10px #244b3b03; }
+        .btn { padding:7px 13px; border-radius:9px; font-size:13px; }
+        .btn-outline { border-color:#d5dfd9; }
+        .btn:disabled { opacity:.5; cursor:wait; }
+        .toolbar.muted label { opacity:.5; pointer-events:none; }
+        .classroom-heading { display:flex; justify-content:space-between; align-items:center; gap:12px; margin:0 2px 10px; }
+        .classroom-title { display:flex; align-items:center; gap:12px; }
+        .room-mark { width:43px; height:43px; display:grid; place-items:center; border-radius:13px; color:#fff; background:#317c6d; font-size:22px; font-weight:800; box-shadow:0 5px 12px #216b5422; }
+        .classroom-heading h1 { font-size:23px; letter-spacing:.03em; line-height:1.25; }
+        .class-meta { display:flex; gap:10px; margin-top:4px; align-items:center; font-size:11px; color:#7e8d85; }
+        .room-pill { padding:2px 7px; border-radius:5px; background:#e5eee6; color:#527667; }
+        .seat-help { font-size:12px; color:var(--text-muted); }
+        #seat-status { text-align:right; margin-top:5px; max-width:590px; }
+        #seat-status[data-state="saved"] { color:#21786a; }
+        #seat-status[data-state="error"] { color:#ba542b; }
+        #seat-status[data-state="draft"] { color:#a67625; }
+        .classroom { border:1px solid #dce5de; border-radius:20px; padding:12px; background:#edf2ec; box-shadow:0 10px 30px #30493606; overflow-x:auto; }
+        .student-grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); grid-template-rows:repeat(5,minmax(91px,1fr)); gap:9px; height:calc(100dvh - 285px); min-height:491px; min-width:850px; }
+        .seat { min-width:0; position:relative; border-radius:13px; }
+        .student-card { height:100%; position:relative; display:grid; grid-template-columns:46px minmax(0,1fr); grid-template-rows:minmax(27px,1fr) minmax(30px,1fr) 23px; column-gap:4px; padding:7px 9px 6px; border:1px solid #dfe7de; border-bottom:3px solid #d5e1d5; border-radius:13px; background:#fff; box-shadow:0 3px 5px #2b443704; text-align:left; transition:box-shadow .15s,border-color .15s; }
+        .student-card:hover { transform:none; border-color:#83b5a5; box-shadow:0 4px 12px #346d4b12; }
+        .student-card.selected { border-color:#2b8c75; background:#eef9f3; }
+        .student-card .avatar { grid-row:1 / 3; grid-column:1; font-size:40px; margin:0; align-self:center; line-height:1.2; text-align:center; }
+        .student-card .name { grid-row:1; grid-column:2; margin:0; font-size:clamp(18px,1.45vw,24px); font-weight:750; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; line-height:1.3; align-self:end; letter-spacing:.01em; }
+        .student-card .pts-container { grid-row:2; grid-column:2; justify-content:flex-start; align-items:center; gap:4px; margin:0; line-height:1; }
+        .student-card .curr-pt { padding:0; background:none; color:#237c68; font-size:clamp(25px,2.2vw,34px)!important; font-weight:800; letter-spacing:-.02em; font-variant-numeric:tabular-nums; }
+        .student-card .pts-container small { font-size:11px; color:#91a198; font-weight:500; padding-top:6px; }
+        .student-card .card-checkbox { width:12px; height:12px; top:5px; left:5px; accent-color:#278670; opacity:.45; }
+        .student-card:hover .card-checkbox,.student-card.selected .card-checkbox { opacity:1; }
+        .quick-btns { grid-column:1 / 3; display:flex; gap:5px; }
+        .quick-btn { flex:1; font-size:13px; line-height:19px; padding:0; border-radius:5px; }
+        .q-add { background:#edf6ef; color:#328265; }
+        .q-sub { background:#fbf0e9; color:#b97b60; }
+        .q-add:hover { background:#d7efdf; } .q-sub:hover { background:#f8dfd2; }
+        .seat.empty { border:1px dashed #cdd9cb; background:#ffffff30; display:flex; align-items:center; justify-content:center; gap:6px; color:#a2b09f; font-size:11px; }
+        .empty-number { font-size:20px; font-weight:500; color:#b6c3b1; }
+        .arranging .student-card { cursor:grab; border:1px dashed #71a992; user-select:none; }
+        .arranging .student-card:active { cursor:grabbing; }
+        .arranging .quick-btns,.arranging .card-checkbox { visibility:hidden; }
+        .student-card.dragging { opacity:.45; }
+        .seat.drop-target { outline:3px solid #339979; outline-offset:2px; background:#ddf1e5; }
+        .student-card.picked { outline:3px solid #d5a347; outline-offset:1px; }
+        .seat:focus-visible { outline:3px solid #d5a347; }
+        .classroom-footer { display:flex; justify-content:space-between; align-items:center; margin-top:10px; gap:20px; min-width:850px; }
+        .room-note { display:flex; align-items:center; gap:12px; padding-left:8px; }
+        .room-note-icon { font-size:28px; }
+        .room-note strong { display:block; font-size:14px; color:#688574; margin-bottom:3px; }
+        .room-note span { font-size:11px; color:#91a08e; }
+        .teacher-desk { display:flex; align-items:center; gap:14px; padding:7px 10px; border:1px solid #e3d2af; border-bottom:4px solid #d6bd8c; border-radius:14px; background:#f6ecda; min-width:470px; }
+        .desk-label { font-size:14px; color:#9c8053; white-space:nowrap; }
+        .desk-label small { display:block; margin-top:3px; font-size:9px; letter-spacing:.13em; opacity:.8; }
+        #teacher-seats { flex:1; display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+        #teacher-seats .seat { height:79px; }
+        #teacher-seats .student-card { grid-template-columns:37px minmax(0,1fr); grid-template-rows:23px 26px 17px; padding:5px 7px; border-color:#e7d6b8; background:#fffdf8; }
+        #teacher-seats .avatar { font-size:31px; }
+        #teacher-seats .name { font-size:19px; }
+        #teacher-seats .curr-pt { font-size:25px!important; color:#a47b38; }
+        #teacher-seats .quick-btn { font-size:11px; line-height:15px; }
+        #seat-overflow { display:grid; grid-template-columns:repeat(7,minmax(120px,1fr)); gap:9px; }
+        #seat-overflow:not(:empty) { margin-top:9px; }
+        #seat-overflow .seat { height:108px; }
+        #overflow-label { margin-top:10px; }
+        [hidden] { display:none!important; }
+        @media (max-height:780px) and (min-width:1000px) { .container { margin:7px auto; } header { padding:4px 20px; } #tab-tracker .toolbar { padding:4px 8px; margin-bottom:6px; } .classroom-heading .btn { padding:5px 12px; } .classroom-title .room-mark { width:38px; height:38px; } .classroom-heading h1 { font-size:22px; } .classroom-heading { margin-bottom:7px; } .classroom { padding:9px; } .student-grid { min-height:440px; grid-template-rows:repeat(5,minmax(82px,1fr)); height:calc(100dvh - 300px); gap:7px; } .student-card { padding:3px 8px; grid-template-rows:24px 27px 20px; } .student-card .avatar { font-size:37px; } .classroom-footer { margin-top:7px; } #teacher-seats .seat { height:71px; } #teacher-seats .student-card { grid-template-rows:20px 23px 16px; padding:4px 6px; } }
+        @media (max-width:999px) { header { position:static; } .container { padding:0 10px; } .classroom-heading { flex-wrap:wrap; } #seat-status { text-align:left; } .student-grid { height:540px; } .student-card .name { font-size:18px; } .student-card .avatar { font-size:34px; } .student-card .curr-pt { font-size:27px!important; } }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div style="display: flex; align-items: center; gap: 1rem;">
+            <div class="logo">👦3C的小天地👧</div>
+            <div class="sync-status"><span class="sync-dot" id="sync-dot"></span><span id="sync-text">雲端未同步</span></div>
+            <button id="cloud-test-btn" class="nav-btn" onclick="testCloudSync()" title="測試 Google Sheet A1 是否可以寫入及讀回">測試雲端同步</button>
+        </div>
+        <nav>
+            <button class="nav-btn active" onclick="switchTab('tracker')">加扣分專區</button>
+            <button class="nav-btn" onclick="switchTab('roster')">學生名冊管理</button>
+            <button class="nav-btn" onclick="switchTab('behaviors')">加扣分項目管理</button>
+            <button class="nav-btn" onclick="switchTab('store')">獎勵商城管理</button>
+            <button class="nav-btn" onclick="switchTab('logs')">歷史紀錄</button>
+        </nav>
+    </header>
+
+    <div class="container">
+        <!-- 頁籤 1: 加扣分專區 -->
+        <div id="tab-tracker">
+            <div class="toolbar">
+                <div class="btn-group">
+                    <button class="btn btn-outline" onclick="toggleSelectAll()">全選 / 取消</button>
+                    <button class="btn btn-primary" onclick="openBatchModal()">多選加扣分 (<span id="select-cnt">0</span>)</button>
+                    <button class="btn btn-success" onclick="quickAll(+1)">全班 +1 分</button>
+                </div>
+                <div class="btn-group">
+                    <label class="btn btn-outline">
+                        📂 匯入 Excel 名冊
+                        <input type="file" id="import-excel" accept=".xlsx, .xls" style="display:none;" onchange="importExcel(event)">
+                    </label>
+                    <button class="btn btn-outline" onclick="exportStudentsExcel()">📥 匯出名冊 Excel</button>
+                </div>
+            </div>
+            <div class="classroom-heading">
+                <div class="classroom-title"><div class="room-mark">3C</div><div><h1>我們的課室</h1><div class="class-meta"><span id="class-count">班級座位表</span><span class="room-pill">7 欄 × 5 排</span></div></div></div>
+                <div><div class="btn-group" style="justify-content:flex-end"><button class="btn btn-outline" id="seat-cancel" onclick="cancelSeatEdit()" hidden>取消</button><button class="btn btn-primary" id="seat-edit" onclick="toggleSeatEdit()" aria-pressed="false">調整座位</button></div><p class="seat-help" id="seat-status" role="status">正在載入雲端座位…</p></div>
+            </div>
+            <div class="classroom">
+                <div class="student-grid" id="student-grid" aria-label="7 欄 5 排學生座位表"></div>
+                <div class="classroom-footer">
+                    <div class="room-note"><div class="room-note-icon">🌱</div><div><strong>每天進步一點點</strong><span>點選卡片記錄表現，一起累積成長。</span></div></div>
+                    <div class="teacher-desk" aria-label="兩人老師桌"><div class="desk-label">老師桌<small>TEACHERS</small></div><div id="teacher-seats"></div></div>
+                </div>
+            </div>
+            <p id="overflow-label" class="seat-help" hidden>待安排人物 · 可拖曳到空位，或與現有座位交換</p>
+            <div id="seat-overflow"></div>
+        </div>
+
+        <!-- 頁籤 2: 學生名冊管理 -->
+        <div id="tab-roster" style="display: none;">
+            <div class="toolbar">
+                <div style="display: flex; gap: 0.5rem; align-items: center; width: 100%; flex-wrap: wrap;">
+                    <select id="new-avatar" style="font-size: 1.1rem; max-width: 200px;">
+                        <optgroup label="🧑 人物角色">
+                            <option value="👦">👦 男生</option>
+                            <option value="👧">👧 女生</option>
+                            <option value="👨‍🎓">👨‍🎓 男學生</option>
+                            <option value="👩‍🎓">👩‍🎓 女學生</option>
+                            <option value="🦸‍♂️">🦸‍♂️ 英雄</option>
+                        </optgroup>
+                        <optgroup label="🐾 豐富動物">
+                            <option value="🐶">🐶 小狗</option>
+                            <option value="🐱">🐱 貓咪</option>
+                            <option value="🐰">🐰 兔子</option>
+                            <option value="🦊">🦊 狐狸</option>
+                            <option value="🐻">🐻 熊熊</option>
+                            <option value="🐼">🐼 貓熊</option>
+                            <option value="🐨">🐨 無尾熊</option>
+                            <option value="🐯">🐯 老虎</option>
+                            <option value="🦁">🦁 獅子</option>
+                            <option value="🐮">🐮 小牛</option>
+                            <option value="🐷">🐷 小豬</option>
+                            <option value="🐸">🐸 青蛙</option>
+                            <option value="🐵">🐵 猴子</option>
+                            <option value="🐧">🐧 企鵝</option>
+                            <option value="🦄">🦄 獨角獸</option>
+                            <option value="🐬">🐬 海豚</option>
+                            <option value="🦈">🦈 鯊魚</option>
+                            <option value="🦉">🦉 貓頭鷹</option>
+                            <option value="🐢">🐢 烏龜</option>
+                            <option value="🦖">🦖 恐龍</option>
+                            <option value="🐘">🐘 大象</option>
+                            <option value="🦒">🦒 長頸鹿</option>
+                            <option value="🐝">🐝 蜜蜂</option>
+                            <option value="🦋">🦋 蝴蝶</option>
+                        </optgroup>
+                        <optgroup label="⚽ 體育運動">
+                            <option value="⚽">⚽ 足球</option>
+                            <option value="🏀">🏀 籃球</option>
+                            <option value="🏈">🏈 美式足球</option>
+                            <option value="⚾">⚾ 棒球</option>
+                            <option value="🎾">🎾 網球</option>
+                            <option value="🏐">🏐 排球</option>
+                            <option value="🏓">🏓 桌球</option>
+                            <option value="🏸">🏸 羽球</option>
+                            <option value="⛳">⛳ 高爾夫</option>
+                            <option value="🎯">🎯 射箭/飛鏢</option>
+                            <option value="🥊">🥊 拳擊</option>
+                            <option value="🥋">🥋 空手道</option>
+                            <option value="🛹">🛹 滑板</option>
+                            <option value="🏊">🏊 游泳</option>
+                            <option value="🚴">🚴 騎車</option>
+                        </optgroup>
+                        <optgroup label="🎸 音樂樂器">
+                            <option value="🎸">🎸 吉他</option>
+                            <option value="🎹">🎹 鋼琴/鍵盤</option>
+                            <option value="🎷">🎷 薩克斯風</option>
+                            <option value="🎺">🎺 小號</option>
+                            <option value="🎻">🎻 小提琴</option>
+                            <option value="🥁">🥁 爵士鼓</option>
+                            <option value="🪕">🪕 斑鳩琴</option>
+                            <option value="🎙️">🎙️ 麥克風</option>
+                            <option value="🎧">🎧 耳機</option>
+                            <option value="🎶">🎶 音符</option>
+                        </optgroup>
+                        <optgroup label="🚀 探索與載具">
+                            <option value="🚀">🚀 火箭</option>
+                            <option value="🌟">🌟 星星</option>
+                            <option value="🎨">🎨 調色盤</option>
+                            <option value="🏎️">🏎️ 賽車</option>
+                        </optgroup>
+                    </select>
+                    <input type="text" id="new-name" placeholder="輸入學生姓名" style="flex-grow: 1;">
+                    <button class="btn btn-primary" onclick="addStudent()">➕ 新增學生</button>
+                </div>
+            </div>
+
+            <div id="roster-list"></div>
+        </div>
+
+        <!-- 頁籤 3: 加扣分項目管理 -->
+        <div id="tab-behaviors" style="display: none;">
+            <div class="toolbar">
+                <div style="display: flex; gap: 0.5rem; align-items: center; width: 100%; flex-wrap: wrap;">
+                    <select id="new-behavior-icon" style="font-size: 1.2rem;">
+                        <option value="🙋‍♂️">🙋‍♂️ 踴躍發言</option>
+                        <option value="🤝">🤝 熱心助人</option>
+                        <option value="⭐">⭐ 團隊合作</option>
+                        <option value="📝">📝 作業優異</option>
+                        <option value="👏">👏 良好表現</option>
+                        <option value="🎯">🎯 專注聽講</option>
+                        <option value="🤫">🤫 課堂吵鬧</option>
+                        <option value="📚">📚 未帶課本</option>
+                        <option value="⚠️">⚠️ 違規警告</option>
+                        <option value="🚶">🚶 遲到</option>
+                        <option value="🗣️">🗣️ 私下講話</option>
+                        <option value="😴">😴 上課打瞌睡</option>
+                    </select>
+                    <select id="new-behavior-type" style="font-size: 0.9rem;">
+                        <option value="pos">正面加分 (+)</option>
+                        <option value="neg">待改進扣分 (-)</option>
+                    </select>
+                    <input type="text" id="new-behavior-title" placeholder="項目名稱 (如: 準時繳交作業)" style="flex-grow: 1;">
+                    <input type="number" id="new-behavior-pts" placeholder="分數 (如 1 或 2)" style="width: 100px;" value="1">
+                    <button class="btn btn-primary" onclick="addBehaviorItem()">➕ 新增加扣分項目</button>
+                </div>
+            </div>
+
+            <div class="store-grid" id="behavior-grid"></div>
+        </div>
+
+        <!-- 頁籤 4: 獎勵商城 -->
+        <div id="tab-store" style="display: none;">
+            <div class="toolbar">
+                <div style="display: flex; gap: 0.5rem; align-items: center; width: 100%; flex-wrap: wrap;">
+                    <select id="new-reward-icon" style="font-size: 1.2rem;">
+                        <option value="🪑">🪑 換座位</option>
+                        <option value="🎟️">🎟️ 免作業</option>
+                        <option value="👑">👑 當組長</option>
+                        <option value="🎵">🎵 背景音樂</option>
+                        <option value="🎁">🎁 禮物</option>
+                        <option value="🍔">🍔 美食點心</option>
+                        <option value="🍦">🍦 冰淇淋</option>
+                        <option value="🎮">🎮 遊戲時間</option>
+                        <option value="✏️">✏️ 文具獎勵</option>
+                        <option value="🏆">🏆 榮譽卡</option>
+                    </select>
+                    <input type="text" id="new-reward-title" placeholder="獎勵品項名稱" style="flex-grow: 1;">
+                    <input type="number" id="new-reward-cost" placeholder="所需點數" style="width: 100px;">
+                    <button class="btn btn-primary" onclick="addReward()">➕ 新增獎勵品項</button>
+                    
+                    <div style="margin-left: auto; display: flex; gap: 0.5rem;">
+                        <label class="btn btn-outline">
+                            📂 匯入獎勵 Excel
+                            <input type="file" id="import-reward-excel" accept=".xlsx, .xls" style="display:none;" onchange="importRewardsExcel(event)">
+                        </label>
+                        <button class="btn btn-outline" onclick="exportRewardsExcel()">📥 匯出獎勵 Excel</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="store-grid" id="store-grid"></div>
+        </div>
+
+        <!-- 頁籤 5: 歷史紀錄 -->
+        <div id="tab-logs" style="display: none;">
+            <div class="toolbar">
+                <h3 style="font-size: 1.1rem;">📜 點數變動明細</h3>
+                <div class="btn-group">
+                    <button class="btn btn-outline" onclick="exportCSV()">📥 匯出明細 (CSV)</button>
+                    <button class="btn-danger-link" onclick="resetAllData()">↺ 重置清空</button>
+                </div>
+            </div>
+            <table>
+                <thead>
+                    <tr><th>時間</th><th>學生</th><th>項目 / 原因</th><th>點數變動</th></tr>
+                </thead>
+                <tbody id="logs-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 行為選擇彈窗 -->
+    <div class="modal-overlay" id="behavior-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="modal-title">選擇行為</h3>
+                <button class="close-btn" onclick="closeModal('behavior-modal')">&times;</button>
+            </div>
+            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0.5rem;">正面加分：</p>
+            <div class="behavior-list" id="pos-behaviors"></div>
+            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0.5rem;">待改進扣分：</p>
+            <div class="behavior-list" id="neg-behaviors"></div>
+        </div>
+    </div>
+
+    <!-- 獎勵兌換彈窗 -->
+    <div class="modal-overlay" id="redeem-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="redeem-title">選擇學生兌換</h3>
+                <button class="close-btn" onclick="closeModal('redeem-modal')">&times;</button>
+            </div>
+            <div id="redeem-list" style="max-height: 250px; overflow-y: auto;"></div>
+        </div>
+    </div>
+
+    <script>
+        // Google Apps Script URL 雲端連結
+        const GAS_URL = "https://script.google.com/macros/s/AKfycbzVImxD0zWoI0xUbujCXoUuqPkVuOKroLtBztQi1hZ3zKwffAfFnp0_q-Lt7OMmd_Obwg/exec";
+
+        const AVATAR_GROUPS = [
+            { group: '🧑 人物角色', icons: ['👦', '👧', '👨‍🎓', '👩‍🎓', '🦸‍♂️'] },
+            { group: '🐾 豐富動物', icons: ['🐶', '🐱', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮', '🐷', '🐸', '🐵', '🐧', '🦄', '🐬', '🦈', '🦉', '🐢', '🦖', '🐘', '🦒', '🐝', '🦋'] },
+            { group: '⚽ 體育運動', icons: ['⚽', '🏀', '🏈', '⚾', '🎾', '🏐', '🏓', '🏸', '⛳', '🎯', '🥊', '🥋', '🛹', '🏊', '🚴'] },
+            { group: '🎸 音樂樂器', icons: ['🎸', '🎹', '🎷', '🎺', '🎻', '🥁', '🪕', '🎙️', '🎧', '🎶'] },
+            { group: '🚀 探索載具', icons: ['🚀', '🌟', '🎨', '🏎️'] }
+        ];
+
+        const DEFAULT_STUDENTS = [
+            { id: 1, name: '王小明', avatar: '🦁', currentPoints: 10, lifetimePoints: 20 },
+            { id: 2, name: '李美玲', avatar: '🦊', currentPoints: 15, lifetimePoints: 25 },
+            { id: 3, name: '張偉強', avatar: '🐼', currentPoints: 5,  lifetimePoints: 12 },
+            { id: 4, name: '陳雅婷', avatar: '🦄', currentPoints: 18, lifetimePoints: 30 }
+        ];
+
+        const DEFAULT_REWARDS = [
+            { id: 'r1', title: '換座位券', cost: 15, icon: '🪑' },
+            { id: 'r2', title: '免寫作業一次', cost: 30, icon: '🎟️' },
+            { id: 'r3', title: '當一日組長', cost: 10, icon: '👑' },
+            { id: 'r4', title: '選課堂背景音樂', cost: 5, icon: '🎵' }
+        ];
+
+        const DEFAULT_BEHAVIORS = [
+            { id: 'b1', title: '踴躍發言', value: 1, type: 'pos', icon: '🙋‍♂️' },
+            { id: 'b2', title: '熱心助人', value: 2, type: 'pos', icon: '🤝' },
+            { id: 'b3', title: '團隊合作', value: 2, type: 'pos', icon: '⭐' },
+            { id: 'b4', title: '作業優異', value: 1, type: 'pos', icon: '📝' },
+            { id: 'b5', title: '課堂吵鬧', value: -1, type: 'neg', icon: '🤫' },
+            { id: 'b6', title: '未帶課本', value: -1, type: 'neg', icon: '📚' },
+            { id: 'b7', title: '未專心聽講', value: -1, type: 'neg', icon: '⚠️' }
+        ];
+
+        let students = JSON.parse(localStorage.getItem('v5_students')) || DEFAULT_STUDENTS;
+        let rewards = JSON.parse(localStorage.getItem('v5_rewards')) || DEFAULT_REWARDS;
+        let behaviors = JSON.parse(localStorage.getItem('v5_behaviors')) || DEFAULT_BEHAVIORS;
+        let logs = JSON.parse(localStorage.getItem('v5_logs')) || [];
+        let selectedStudentIds = new Set();
+        let targetStudentId = null;
+        let currentRewardForRedeem = null;
+
+        /* 雲端資料同步機制 */
+        let saveQueue = Promise.resolve();
+        let cloudSyncVersion = 0;
+
+        function setSyncStatus(isSynced, text) {
+            const dot = document.getElementById('sync-dot');
+            const label = document.getElementById('sync-text');
+            if (isSynced) {
+                dot.classList.add('active');
+                label.innerText = text || "已成功同步至雲端試算表";
+            } else {
+                dot.classList.remove('active');
+                label.innerText = text || "正在同步雲端...";
+            }
+        }
+
+        async function loadDataFromCloud() {
+            if (!GAS_URL) return;
+            setSyncStatus(false, "與雲端同步中...");
+
+            try {
+                // 加時間戳 + no-store，避免重新整理時讀到舊的 GET cache
+                const url = GAS_URL + (GAS_URL.includes('?') ? '&' : '?') + 't=' + Date.now();
+                const res = await fetch(url, {
+                    method: 'GET',
+                    cache: 'no-store'
+                });
+
+                if (!res.ok) throw new Error('雲端讀取 HTTP ' + res.status);
+
+                const text = await res.text();
+                if (!text || text.trim() === '' || text.trim() === '{}') {
+                    setSyncStatus(true, '雲端目前沒有資料');
+                    return;
+                }
+
+                const data = JSON.parse(text);
+                if (data.status === 'error') throw new Error(data.message || 'Apps Script 讀取失敗');
+
+                if (Array.isArray(data.students) && data.students.length > 0) students = data.students;
+                if (Array.isArray(data.rewards) && data.rewards.length > 0) rewards = data.rewards;
+                if (Array.isArray(data.behaviors) && data.behaviors.length > 0) behaviors = data.behaviors;
+                if (Array.isArray(data.logs)) logs = data.logs;
+                acceptCloudSeating(data.seating);
+
+                localStorage.setItem('v5_students', JSON.stringify(students));
+                localStorage.setItem('v5_rewards', JSON.stringify(rewards));
+                localStorage.setItem('v5_behaviors', JSON.stringify(behaviors));
+                localStorage.setItem('v5_logs', JSON.stringify(logs));
+
+                renderAll();
+                setSyncStatus(true, '已載入雲端最新資料');
+            } catch (e) {
+                console.error('雲端載入失敗，使用本機紀錄', e);
+                setSyncStatus(false, '離線模式（使用本機紀錄）');
+                setSeatStatus('未能讀取雲端座位，請檢查網絡後再試。', 'error');
+            }
+        }
+
+        function saveData() {
+            // 先即時保存到本機，避免網絡中斷時資料消失
+            localStorage.setItem('v5_students', JSON.stringify(students));
+            localStorage.setItem('v5_rewards', JSON.stringify(rewards));
+            localStorage.setItem('v5_behaviors', JSON.stringify(behaviors));
+            localStorage.setItem('v5_logs', JSON.stringify(logs));
+
+            if (!GAS_URL) return Promise.resolve(false);
+
+            // 將快速連續操作排隊，避免多個 POST 同時寫入 A1 而互相覆蓋
+            const payload = JSON.stringify({ students, rewards, behaviors, logs });
+            const version = ++cloudSyncVersion;
+
+            saveQueue = saveQueue
+                .catch(() => false)
+                .then(() => sendDataToCloud(payload, version));
+
+            return saveQueue;
+        }
+
+        async function sendDataToCloud(payload, version) {
+            setSyncStatus(false, '同步中...');
+
+            try {
+                // GitHub Pages 與 Apps Script 屬跨來源請求；使用 no-cors 避免 CORS 預檢問題。
+                // await 會等到瀏覽器完成這次網絡請求，避免立即重新整理造成舊資料覆蓋。
+                await fetch(GAS_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: payload
+                });
+
+                if (version === cloudSyncVersion) {
+                    setSyncStatus(true, '已成功送出雲端儲存');
+                }
+                return true;
+            } catch (err) {
+                console.error('同步失敗:', err);
+                if (version === cloudSyncVersion) {
+                    setSyncStatus(false, '同步失敗（已保留本機紀錄）');
+                }
+                return false;
+            }
+        }
+
+        async function waitForCloudSave() {
+            try { return await saveQueue; } catch (_) { return false; }
+        }
+
+        /*
+         * 雲端寫入診斷（配合新版分欄儲存架構）：
+         * 1. POST 一筆只帶測試標記的資料，後端會寫進專屬的測試欄位（F2），完全不會碰到
+         *    students / rewards / behaviors / logs 這些正式資料，所以不需要再讀取、還原 A1。
+         * 2. GET 讀回，確認測試欄位裡的標記跟剛剛送出的一致。
+         * 注意：POST 使用 no-cors，所以不能直接讀 POST 回應；真正的成功判斷以之後 GET 到的結果為準。
+         */
+        async function testCloudSync() {
+            const btn = document.getElementById('cloud-test-btn');
+            if (!GAS_URL) {
+                alert('尚未設定 Google Apps Script URL。');
+                return;
+            }
+
+            if (btn) {
+                btn.disabled = true;
+                btn.innerText = '測試中...';
+            }
+            setSyncStatus(false, '正在測試雲端寫入...');
+
+            const makeGetUrl = () => GAS_URL + (GAS_URL.includes('?') ? '&' : '?') + 'test=' + Date.now() + '_' + Math.random().toString(36).slice(2);
+            const marker = 'TEST_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+
+            async function postMarker() {
+                await fetch(GAS_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({ __cloudSyncTest: marker })
+                });
+            }
+
+            async function getTestField() {
+                const res = await fetch(makeGetUrl(), { method: 'GET', cache: 'no-store' });
+                if (!res.ok) throw new Error('GET HTTP ' + res.status);
+                const text = await res.text();
+                const data = JSON.parse(text);
+                if (data && data.status === 'error') throw new Error(data.message || 'Apps Script 回傳錯誤');
+                return data.test;
+            }
+
+            try {
+                await postMarker();
+
+                let ok = false;
+                for (let i = 0; i < 6; i++) {
+                    await new Promise(resolve => setTimeout(resolve, i === 0 ? 700 : 1000));
+                    const testField = await getTestField();
+                    if (testField && testField.__cloudSyncTest === marker) { ok = true; break; }
+                }
+
+                if (!ok) throw new Error('POST 後重新讀取，未找到測試標記。');
+
+                setSyncStatus(true, '雲端寫入測試成功');
+                alert('🟢 雲端同步測試成功！\n\n已確認：網頁 → GAS POST → Google Sheet → GET 讀回，整條流程正常。\n（本測試只會寫入專屬的測試欄位，不會影響任何正式資料。）');
+            } catch (err) {
+                console.error('雲端同步測試失敗:', err);
+                setSyncStatus(false, '雲端寫入測試失敗');
+                alert('🔴 雲端同步測試失敗。\n\n原因：' + (err && err.message ? err.message : err) + '\n\n請到 Apps Script 編輯器查看「執行項目 Executions」紀錄找出實際錯誤。');
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerText = '測試雲端同步';
+                }
+            }
+        }
+
+        async function resetAllData() {
+            if (confirm('確定要將所有學生、加扣分項目與獎勵清單重置回預設值嗎？')) {
+                localStorage.removeItem('v5_students');
+                localStorage.removeItem('v5_rewards');
+                localStorage.removeItem('v5_behaviors');
+                localStorage.removeItem('v5_logs');
+                students = JSON.parse(JSON.stringify(DEFAULT_STUDENTS));
+                rewards = JSON.parse(JSON.stringify(DEFAULT_REWARDS));
+                behaviors = JSON.parse(JSON.stringify(DEFAULT_BEHAVIORS));
+                logs = [];
+                selectedStudentIds.clear();
+                renderAll();
+                await saveData();
+            }
+        }
+
+        /* 音效處理 */
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playSound(isPositive) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            if (isPositive) {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(587.33, audioCtx.currentTime);
+                osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.08);
+                gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.25);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.25);
+            } else {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(160, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.25);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.25);
+            }
+        }
+
+        /* 歷史紀錄與動畫輔助 */
+        function addLog(studentName, reason, delta) {
+            const timeStr = new Date().toLocaleString('zh-TW', { hour12: false });
+            logs.unshift({
+                time: timeStr,
+                student: studentName,
+                reason: reason,
+                delta: delta > 0 ? `+${delta}` : `${delta}`
+            });
+            if (logs.length > 200) logs.pop();
+        }
+
+        function showAnim(card, text, isPositive) {
+            if (!card) return;
+            const tag = document.createElement('div');
+            tag.className = 'anim-tag';
+            tag.innerText = text;
+            tag.style.color = isPositive ? 'var(--success)' : 'var(--danger)';
+            card.appendChild(tag);
+            setTimeout(() => tag.remove(), 700);
+        }
+
+        /* Excel - 學生名冊匯入/匯出 */
+        async function importExcel(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = async function(evt) {
+                try {
+                    const data = new Uint8Array(evt.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                    if (json.length === 0) return alert('Excel 檔內無資料！');
+
+                    students = json.map((item, idx) => ({
+                        id: item['學號'] || item['ID'] || (idx + 1),
+                        name: item['學生姓名'] || item['姓名'] || `學生${idx + 1}`,
+                        avatar: item['學生 Icon'] || item['頭像'] || '👦',
+                        currentPoints: Number(item['目前點數'] ?? 10),
+                        lifetimePoints: Number(item['總點數'] ?? 20)
+                    }));
+                    await saveData(); renderAll();
+                    alert(`成功從 Excel 匯入 ${students.length} 位學生名單！`);
+                } catch (err) { alert('匯入失敗，請確認格式！'); }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function exportStudentsExcel() {
+            const exportData = students.map(s => ({
+                "學號": s.id, "學生姓名": s.name, "學生 Icon": s.avatar, "目前點數": s.currentPoints, "總點數": s.lifetimePoints
+            }));
+            const worksheet = XLSX.utils.json_to_sheet(exportData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "學生名冊");
+            XLSX.writeFile(workbook, `班級學生名冊_${new Date().toISOString().slice(0,10)}.xlsx`);
+        }
+
+        /* Excel - 獎勵商城匯入/匯出 */
+        async function importRewardsExcel(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = async function(evt) {
+                try {
+                    const data = new Uint8Array(evt.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                    if (json.length === 0) return alert('Excel 檔內無資料！');
+
+                    rewards = json.map((item, idx) => ({
+                        id: 'r_' + Date.now() + '_' + idx,
+                        title: item['品項名稱'] || item['名稱'] || `獎勵${idx + 1}`,
+                        icon: item['圖示 Icon'] || item['圖示'] || '🎁',
+                        cost: Number(item['所需點數'] ?? 10)
+                    }));
+                    await saveData(); renderStore();
+                    alert(`成功從 Excel 匯入 ${rewards.length} 項獎勵商品！`);
+                } catch (err) { alert('匯入失敗，請確認格式！'); }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function exportRewardsExcel() {
+            const exportData = rewards.map(r => ({
+                "品項名稱": r.title, "圖示 Icon": r.icon, "所需點數": r.cost
+            }));
+            const worksheet = XLSX.utils.json_to_sheet(exportData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "獎勵清單");
+            XLSX.writeFile(workbook, `獎勵商城清單_${new Date().toISOString().slice(0,10)}.xlsx`);
+        }
+
+        /* 頁籤切換 */
+        function switchTab(tabId) {
+            ['tracker', 'roster', 'behaviors', 'store', 'logs'].forEach(id => {
+                const el = document.getElementById('tab-' + id);
+                if (el) el.style.display = (id === tabId) ? 'block' : 'none';
+            });
+            
+            const btns = document.querySelectorAll('nav .nav-btn');
+            const tabs = ['tracker', 'roster', 'behaviors', 'store', 'logs'];
+            btns.forEach((btn, idx) => {
+                if (tabs[idx] === tabId) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+
+            renderAll();
+        }
+
+        // Seat numbers live in a separate Google Sheet cell; no scoring writes here.
+        const SEATING_CACHE_KEY = 'classroom_cloud_seating_v2';
+        const TEACHER_IDS = new Set(['1787571771840','1787571916809']);
+        let seatIds = Array(37).fill(null);
+        let cloudSeating = {version:0, positions:[]};
+        let seatEditing = false, seatBusy = false, seatsReady = false;
+        let pickedStudentId = null;
+        let lastSeatRequest = null;
+        function isTeacher(s) { return !!s && TEACHER_IDS.has(String(s.id)); }
+        function setSeatStatus(message, state='') {
+            const el = document.getElementById('seat-status');
+            el.textContent = message; el.dataset.state = state;
+        }
+        function layoutFromPositions(positions) {
+            const slots = Array(37).fill(null), used = new Set();
+            const roster = new Map(students.map(s=>[String(s.id),s]));
+            (Array.isArray(positions)?positions:[]).forEach(p => {
+                const id=String(p.id), s=roster.get(id);
+                if (!s || used.has(id) || !Number.isInteger(p.seat) || p.seat<0 || p.seat>37) return;
+                if (p.seat===0) { used.add(id); return; }
+                if (slots[p.seat-1] !== null || (p.seat>35 && !isTeacher(s))) return;
+                slots[p.seat-1]=id; used.add(id);
+            });
+            students.forEach(s=> {
+                const id=String(s.id); if(used.has(id)) return;
+                let empty=isTeacher(s)?slots.findIndex((v,i)=>i>=35 && v===null):-1;
+                if(empty===-1) empty=slots.findIndex((v,i)=>i<35 && v===null);
+                if(empty!==-1) slots[empty]=id;
+                used.add(id);
+            });
+            return slots;
+        }
+        function acceptCloudSeating(value) {
+            cloudSeating = value && !Array.isArray(value) && Number.isInteger(value.version) && Array.isArray(value.positions)
+                ? value : {version:0,positions:[]};
+            seatIds=layoutFromPositions(cloudSeating.positions);
+            seatsReady=true;
+            try { localStorage.setItem(SEATING_CACHE_KEY,JSON.stringify(cloudSeating)); } catch (_) {}
+            setSeatStatus('座位已與 Google Sheet 同步', 'saved');
+        }
+        async function fetchClassroomState() {
+            const response=await fetch(GAS_URL+(GAS_URL.includes('?')?'&':'?')+'seats='+Date.now(),{cache:'no-store'});
+            if(!response.ok) throw new Error('雲端讀取失敗');
+            const data=await response.json();
+            if(data.status==='error' || !Array.isArray(data.students)) throw new Error('雲端資料無法讀取');
+            return data;
+        }
+        function sameRoster(data) {
+            const ids=data.students.map(s=>String(s.id)).sort();
+            return JSON.stringify(ids)===JSON.stringify(students.map(s=>String(s.id)).sort());
+        }
+        async function refreshSeats() {
+            if(seatEditing || seatBusy || !GAS_URL) return;
+            try {
+                const data=await fetchClassroomState();
+                if(seatEditing || seatBusy) return;
+                if(!sameRoster(data)) { setSeatStatus('名單已有更新，請重新整理頁面。','error'); return; }
+                acceptCloudSeating(data.seating); renderStudents();
+            } catch (_) { setSeatStatus('暫時離線，顯示上次座位安排。','error'); }
+        }
+        async function toggleSeatEdit() {
+            if(seatBusy) return;
+            if(seatEditing) { await saveSeatsToCloud(); return; }
+            seatBusy=true; updateSeatControls();
+            setSeatStatus('正在讀取最新座位…');
+            try {
+                await waitForCloudSave();
+                const data=await fetchClassroomState();
+                if(!sameRoster(data)) throw new Error('名單已有更新，請重新整理頁面後再安排座位。');
+                acceptCloudSeating(data.seating);
+                seatEditing=true; pickedStudentId=null;
+                setSeatStatus('拖曳換位，或先點人物再點目的位置；完成後按「儲存座位」。');
+            } catch(e) { setSeatStatus(e.message || '未能連接雲端，請稍後重試。','error'); }
+            finally { seatBusy=false; renderStudents(); }
+        }
+        function cancelSeatEdit() {
+            if(seatBusy) return;
+            seatEditing=false; pickedStudentId=null;
+            seatIds=layoutFromPositions(cloudSeating.positions);
+            setSeatStatus('已取消本次調整，保留雲端座位。'); renderStudents();
+        }
+        function currentPositions() { return students.map(s=>({id:String(s.id),seat:seatIds.indexOf(String(s.id))+1})); }
+        async function saveSeatsToCloud() {
+            if(!seatEditing || seatBusy) return;
+            seatBusy=true; updateSeatControls(); setSeatStatus('正在儲存座位到 Google Sheet…');
+            try {
+                // Reconcile uncertain prior saves before retrying; no blind overwrites.
+                const latest=await fetchClassroomState();
+                if(!sameRoster(latest)) throw new Error('名單已有更新，請取消調整並重新整理頁面。');
+                const remote=latest.seating || {};
+                if(lastSeatRequest && remote.requestId===lastSeatRequest.requestId && JSON.stringify(currentPositions())===JSON.stringify(lastSeatRequest.positions)) {
+                    acceptCloudSeating(remote); seatEditing=false; lastSeatRequest=null; return;
+                }
+                if((remote.version||0)!==cloudSeating.version) {
+                    acceptCloudSeating(remote); seatEditing=false;
+                    setSeatStatus('另一個瀏覽器已更新座位，已載入最新安排，請再調整。','error'); return;
+                }
+                const request={__seatingOnly:true,baseVersion:cloudSeating.version,requestId:'seat-'+Date.now()+'-'+Math.random().toString(36).slice(2),positions:currentPositions()};
+                lastSeatRequest=request;
+                await fetch(GAS_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(request)});
+                for(let attempt=0;attempt<5;attempt++) {
+                    if(attempt) await new Promise(resolve=>setTimeout(resolve,800));
+                    const readback=await fetchClassroomState();
+                    if(readback.seating?.requestId===request.requestId) {
+                        acceptCloudSeating(readback.seating); seatEditing=false; pickedStudentId=null; lastSeatRequest=null;
+                        setSeatStatus('座位已儲存，所有瀏覽器會使用同一安排。','saved'); return;
+                    }
+                    if((readback.seating?.version||0)!==request.baseVersion) {
+                        acceptCloudSeating(readback.seating); seatEditing=false;
+                        setSeatStatus('另一個瀏覽器剛更新了座位，已載入最新安排。','error'); return;
+                    }
+                }
+                throw new Error('尚未確認雲端儲存，請保留此頁並按「儲存座位」重試。');
+            } catch(e) { setSeatStatus(e.message || '儲存失敗，請重試。','error'); }
+            finally { seatBusy=false; renderStudents(); }
+        }
+        function updateSeatControls() {
+            const button=document.getElementById('seat-edit');
+            button.textContent=seatBusy?'同步中…':seatEditing?'儲存座位':'調整座位';
+            button.disabled=seatBusy; button.setAttribute('aria-pressed',String(seatEditing));
+            document.getElementById('seat-cancel').hidden=!seatEditing;
+            document.getElementById('seat-cancel').disabled=seatBusy;
+            document.querySelectorAll('#tab-tracker .toolbar button,#tab-tracker .toolbar input').forEach(el=>el.disabled=seatEditing||seatBusy);
+            document.querySelector('#tab-tracker .toolbar').classList.toggle('muted',seatEditing||seatBusy);
+        }
+        function moveToSeat(id,target) {
+            if(!seatEditing || seatBusy || id==null || !Number.isInteger(target) || target<0 || target>36) return;
+            const s=students.find(s=>String(s.id)===id); if(!s) return;
+            const from=seatIds.indexOf(id), displaced=seatIds[target];
+            if(target>=35 && !isTeacher(s)) { setSeatStatus('老師桌只供 Mr. IP 和 Ms. Lam 使用。','error'); return; }
+            if(from>=35 && displaced && !TEACHER_IDS.has(displaced)) { setSeatStatus('請先將學生移到其他座位，再把老師移到這裡。','error'); return; }
+            seatIds[target]=id; if(from!==-1) seatIds[from]=displaced;
+            pickedStudentId=null;
+            setSeatStatus('座位已調整，按「儲存座位」同步到所有瀏覽器。','draft');
+            renderStudents();
+        }
+        function renderStudents() {
+            if(!seatsReady && !seatEditing) {
+                try { const cached=JSON.parse(localStorage.getItem(SEATING_CACHE_KEY)); seatIds=layoutFromPositions(cached?.positions); }
+                catch(_) { seatIds=layoutFromPositions([]); }
+            } else if(!seatEditing) seatIds=layoutFromPositions(cloudSeating.positions);
+            const grid=document.getElementById('student-grid'),overflow=document.getElementById('seat-overflow'),desk=document.getElementById('teacher-seats');
+            [grid,overflow,desk].forEach(el=>{el.replaceChildren();el.classList.toggle('arranging',seatEditing);});
+            function makeSeat(s,index) {
+                const seat=document.createElement('div'); seat.className='seat'+(s?'':' empty')+(index>=35?' teacher-seat':'');
+                if(index!=null) seat.dataset.seat=String(index);
+                const label=index==null?'待安排':index>=35?'老師桌 '+(index-34):'第 '+(Math.floor(index/7)+1)+' 排，第 '+(index%7+1)+' 位';
+                seat.setAttribute('aria-label',label+(s?' '+s.name:' 空位'));
+                if(seatEditing) {seat.tabIndex=0;seat.setAttribute('role','button');}
+                const activate=()=> {
+                    if(!seatEditing || seatBusy) return;
+                    if(pickedStudentId!==null && index!=null) moveToSeat(pickedStudentId,index);
+                    else if(s) {pickedStudentId=String(s.id);renderStudents();setSeatStatus('已選取 '+s.name+'，請點選目的位置。');}
+                };
+                seat.onclick=activate;
+                seat.onkeydown=e=>{if(seatEditing && (e.key==='Enter'||e.key===' ')){e.preventDefault();activate();}if(e.key==='Escape'){pickedStudentId=null;renderStudents();}};
+                if(!s) {const num=document.createElement('span');num.className='empty-number';num.textContent=index>=35?'＋':String(index+1).padStart(2,'0');const hint=document.createElement('span');hint.textContent=index>=35?'拖曳老師到這裡':'空位';seat.append(num,hint);return seat;}
+                const card=document.createElement('div');card.className='student-card'+(isTeacher(s)?' is-teacher':'')+(selectedStudentIds.has(s.id)?' selected':'')+(pickedStudentId===String(s.id)?' picked':'');card.id='card-'+s.id;
+                card.style.touchAction=seatEditing?'none':'auto';
+                card.onpointerdown=e=>{
+                    if(!seatEditing || seatBusy || e.button!==0) return;
+                    const x=e.clientX,y=e.clientY;let moved=false;
+                    card.setPointerCapture(e.pointerId);
+                    const clear=()=>document.querySelectorAll('.drop-target').forEach(el=>el.classList.remove('drop-target'));
+                    card.onpointermove=ev=>{if(Math.hypot(ev.clientX-x,ev.clientY-y)>6)moved=true;if(!moved)return;card.classList.add('dragging');clear();document.elementFromPoint(ev.clientX,ev.clientY)?.closest('[data-seat]')?.classList.add('drop-target');};
+                    const finish=()=>{card.onpointermove=null;card.onpointerup=null;card.classList.remove('dragging');clear();};
+                    card.onpointerup=ev=>{finish();if(!moved)return;ev.preventDefault();ev.stopPropagation();const target=document.elementFromPoint(ev.clientX,ev.clientY)?.closest('[data-seat]');if(target)moveToSeat(String(s.id),Number(target.dataset.seat));};
+                    card.onpointercancel=finish;
+                };
+                card.onclick=e=>{if(!seatEditing&&!seatBusy&&!e.target.closest('input,button'))openSingleModal(s.id);};
+                const checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.className='card-checkbox';checkbox.checked=selectedStudentIds.has(s.id);checkbox.disabled=seatEditing||seatBusy;checkbox.setAttribute('aria-label','選取 '+s.name);checkbox.onchange=e=>toggleSelect(s.id,e);
+                const avatar=document.createElement('div');avatar.className='avatar';avatar.textContent=s.avatar;
+                const name=document.createElement('div');name.className='name';name.textContent=s.name;name.title=s.name;
+                const points=document.createElement('div');points.className='pts-container';const badge=document.createElement('span');badge.className='pt-badge curr-pt';badge.textContent=s.currentPoints;const unit=document.createElement('small');unit.textContent='分';points.append(badge,unit);
+                const buttons=document.createElement('div');buttons.className='quick-btns';
+                [1,-1].forEach(delta=>{const btn=document.createElement('button');btn.className='quick-btn '+(delta===1?'q-add':'q-sub');btn.textContent=delta===1?'+1':'−1';btn.disabled=seatEditing||seatBusy;btn.setAttribute('aria-label',s.name+(delta===1?' 加 1 分':' 扣 1 分'));btn.onclick=e=>{if(!seatEditing&&!seatBusy)quickPoint(s.id,delta,e);};buttons.append(btn);});
+                card.append(checkbox,avatar,name,points,buttons);seat.append(card);return seat;
+            }
+            seatIds.forEach((id,index)=>{const s=students.find(s=>String(s.id)===id);(index<35?grid:desk).append(makeSeat(s,index));});
+            const extras=students.filter(s=>!seatIds.includes(String(s.id)));extras.forEach(s=>overflow.append(makeSeat(s,null)));document.getElementById('overflow-label').hidden=extras.length===0;
+            document.getElementById('select-cnt').innerText=selectedStudentIds.size;
+            document.getElementById('class-count').textContent=students.filter(s=>!isTeacher(s)).length+' 位學生 · 2 位老師';
+            updateSeatControls();
+        }
+        window.addEventListener('focus',()=>{if(seatsReady)refreshSeats();});
+
+        /* 渲染畫面 - 學生名冊 */
+        function renderRoster() {
+            const list = document.getElementById('roster-list');
+            list.innerHTML = '';
+
+            students.forEach((s) => {
+                const item = document.createElement('div');
+                item.className = 'roster-card';
+
+                let avatarOptionsHTML = '';
+                AVATAR_GROUPS.forEach(g => {
+                    avatarOptionsHTML += `<optgroup label="${g.group}">`;
+                    g.icons.forEach(ic => {
+                        avatarOptionsHTML += `<option value="${ic}" ${s.avatar === ic ? 'selected' : ''}>${ic}</option>`;
+                    });
+                    avatarOptionsHTML += `</optgroup>`;
+                });
+
+                item.innerHTML = `
+                    <div class="roster-info">
+                        <select onchange="updateStudent(${s.id}, 'avatar', this.value)" style="font-size: 1.2rem;">
+                            ${avatarOptionsHTML}
+                        </select>
+                        <input type="text" value="${s.name}" onchange="updateStudent(${s.id}, 'name', this.value)" placeholder="學生姓名" style="width: 140px;">
+                        <label style="font-size: 0.85rem; color: var(--text-muted);">目前點數: 
+                            <input type="number" value="${s.currentPoints}" onchange="updateStudent(${s.id}, 'currentPoints', Number(this.value))" style="width: 70px;">
+                        </label>
+                        <label style="font-size: 0.85rem; color: var(--text-muted);">總累積點數: 
+                            <input type="number" value="${s.lifetimePoints}" onchange="updateStudent(${s.id}, 'lifetimePoints', Number(this.value))" style="width: 70px;">
+                        </label>
+                    </div>
+                    <button class="btn btn-outline" style="color: var(--danger); border-color: var(--danger);" onclick="deleteStudent(${s.id})">🗑️ 刪除</button>
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        async function updateStudent(id, key, val) {
+            const s = students.find(x => x.id === id);
+            if (s) {
+                s[key] = val;
+                await saveData();
+                renderStudents();
+            }
+        }
+
+        async function addStudent() {
+            const avatar = document.getElementById('new-avatar').value;
+            const nameInput = document.getElementById('new-name');
+            const name = nameInput.value.trim();
+            if (!name) return alert('請輸入學生姓名！');
+
+            const newId = students.length > 0 ? Math.max(...students.map(s => Number(s.id) || 0)) + 1 : 1;
+            students.push({
+                id: newId,
+                name: name,
+                avatar: avatar,
+                currentPoints: 10,
+                lifetimePoints: 10
+            });
+            nameInput.value = '';
+            await saveData();
+            renderAll();
+        }
+
+        async function deleteStudent(id) {
+            if (confirm('確定要刪除這位學生嗎？')) {
+                students = students.filter(s => s.id !== id);
+                selectedStudentIds.delete(id);
+                await saveData();
+                renderAll();
+            }
+        }
+
+        /* 渲染畫面 - 加扣分項目 */
+        let draggingCatalog = null;
+        function catalogDragStart(e, type, id) {
+            draggingCatalog = { type, id };
+            e.currentTarget.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', id);
+        }
+        function catalogDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }
+        async function catalogDrop(e, type, targetId) {
+            e.preventDefault();
+            if (!draggingCatalog || draggingCatalog.type !== type || draggingCatalog.id === targetId) return;
+            const list = type === 'behavior' ? behaviors : rewards;
+            const from = list.findIndex(x => x.id === draggingCatalog.id);
+            const to = list.findIndex(x => x.id === targetId);
+            if (from < 0 || to < 0) return;
+            const [item] = list.splice(from, 1); list.splice(to, 0, item);
+            draggingCatalog = null;
+            await saveData();
+            type === 'behavior' ? renderBehaviors() : renderStore();
+        }
+        function catalogDragEnd(e) { e.currentTarget.classList.remove('dragging'); draggingCatalog = null; }
+
+        function renderBehaviors() {
+            const grid = document.getElementById('behavior-grid');
+            grid.innerHTML = '';
+
+            behaviors.forEach(b => {
+                const card = document.createElement('div');
+                card.className = 'store-card catalog-card'; card.draggable = true;
+                card.ondragstart = e => catalogDragStart(e, 'behavior', b.id);
+                card.ondragover = catalogDragOver;
+                card.ondrop = e => catalogDrop(e, 'behavior', b.id);
+                card.ondragend = catalogDragEnd;
+                card.innerHTML = `
+                    <button class="del-btn" onclick="deleteBehavior('${b.id}')">✖</button>
+                    <div class="catalog-head"><span class="catalog-grip">⋮⋮</span><input class="catalog-icon-input" data-field="icon" value="${b.icon || '⭐'}" maxlength="4"><input class="catalog-edit-title" data-field="title" value="${b.title.replace(/"/g, '&quot;')}"></div>
+                    <div class="catalog-edit-row"><label>分數</label><input data-field="value" type="number" min="1" step="1" value="${Math.abs(Number(b.value) || 1)}"><select data-field="type"><option value="pos" ${b.type === 'pos' ? 'selected' : ''}>加分</option><option value="neg" ${b.type === 'neg' ? 'selected' : ''}>扣分</option></select></div>
+                    <div class="catalog-actions"><button class="btn btn-primary" onclick="updateBehavior('${b.id}', this)">儲存修改</button><button class="btn btn-outline" onclick="deleteBehavior('${b.id}')">刪除</button></div>
+                    <div class="catalog-hint">拖曳卡片可調整顯示次序</div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        async function updateBehavior(id, button) {
+            const card = button.closest('.catalog-card'), b = behaviors.find(x => x.id === id);
+            if (!b) return;
+            const title = card.querySelector('[data-field="title"]').value.trim();
+            const icon = card.querySelector('[data-field="icon"]').value.trim() || '⭐';
+            const pts = Number(card.querySelector('[data-field="value"]').value);
+            const type = card.querySelector('[data-field="type"]').value;
+            if (!title) return alert('請輸入項目名稱！');
+            if (!Number.isFinite(pts) || pts <= 0) return alert('請輸入大於 0 的分數！');
+            b.title = title; b.icon = icon; b.type = type; b.value = type === 'neg' ? -Math.abs(pts) : Math.abs(pts);
+            await saveData(); renderBehaviors();
+        }
+
+        async function addBehaviorItem() {
+            const icon = document.getElementById('new-behavior-icon').value;
+            const type = document.getElementById('new-behavior-type').value;
+            const title = document.getElementById('new-behavior-title').value.trim();
+            let pts = Number(document.getElementById('new-behavior-pts').value);
+
+            if (!title) return alert('請輸入項目名稱！');
+            if (isNaN(pts)) pts = 1;
+            if (type === 'neg' && pts > 0) pts = -pts;
+            if (type === 'pos' && pts < 0) pts = Math.abs(pts);
+
+            behaviors.push({
+                id: 'b_' + Date.now(),
+                title: title,
+                value: pts,
+                type: type,
+                icon: icon
+            });
+
+            document.getElementById('new-behavior-title').value = '';
+            await saveData();
+            renderBehaviors();
+        }
+
+        async function deleteBehavior(id) {
+            if (confirm('確定要刪除這個加扣分項目嗎？')) {
+                behaviors = behaviors.filter(b => b.id !== id);
+                await saveData();
+                renderBehaviors();
+            }
+        }
+
+        /* 渲染畫面 - 獎勵商城 */
+        function renderStore() {
+            const grid = document.getElementById('store-grid');
+            grid.innerHTML = '';
+
+            rewards.forEach(r => {
+                const card = document.createElement('div');
+                card.className = 'store-card catalog-card'; card.draggable = true;
+                card.ondragstart = e => catalogDragStart(e, 'reward', r.id);
+                card.ondragover = catalogDragOver;
+                card.ondrop = e => catalogDrop(e, 'reward', r.id);
+                card.ondragend = catalogDragEnd;
+                card.innerHTML = `
+                    <button class="del-btn" onclick="deleteReward('${r.id}')">✖</button>
+                    <div class="catalog-head"><span class="catalog-grip">⋮⋮</span><input class="catalog-icon-input" data-field="icon" value="${r.icon || '🎁'}" maxlength="4"><input class="catalog-edit-title" data-field="title" value="${r.title.replace(/"/g, '&quot;')}"></div>
+                    <div class="catalog-edit-row"><label>所需點數</label><input data-field="cost" type="number" min="1" step="1" value="${Number(r.cost) || 1}"></div>
+                    <div class="catalog-actions"><button class="btn btn-primary" onclick="updateReward('${r.id}', this)">儲存修改</button><button class="btn btn-outline" onclick="deleteReward('${r.id}')">刪除</button></div>
+                    <button class="btn btn-primary" style="width:100%; margin-top:.55rem; font-size:.85rem;" onclick="openRedeemModal('${r.id}')">🎁 點擊兌換</button>
+                    <div class="catalog-hint">拖曳卡片可調整顯示次序</div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        async function updateReward(id, button) {
+            const card = button.closest('.catalog-card'), r = rewards.find(x => x.id === id);
+            if (!r) return;
+            const title = card.querySelector('[data-field="title"]').value.trim();
+            const icon = card.querySelector('[data-field="icon"]').value.trim() || '🎁';
+            const cost = Number(card.querySelector('[data-field="cost"]').value);
+            if (!title) return alert('請輸入獎勵名稱！');
+            if (!Number.isFinite(cost) || cost <= 0) return alert('請輸入大於 0 的所需點數！');
+            r.title = title; r.icon = icon; r.cost = cost;
+            await saveData(); renderStore();
+        }
+
+        async function addReward() {
+            const icon = document.getElementById('new-reward-icon').value;
+            const title = document.getElementById('new-reward-title').value.trim();
+            const cost = Number(document.getElementById('new-reward-cost').value);
+
+            if (!title) return alert('請輸入獎勵名稱！');
+            if (isNaN(cost) || cost <= 0) return alert('請輸入有效的所需點數！');
+
+            rewards.push({
+                id: 'r_' + Date.now(),
+                title: title,
+                cost: cost,
+                icon: icon
+            });
+
+            document.getElementById('new-reward-title').value = '';
+            document.getElementById('new-reward-cost').value = '';
+            await saveData();
+            renderStore();
+        }
+
+        async function deleteReward(id) {
+            if (confirm('確定要刪除這項獎勵品項嗎？')) {
+                rewards = rewards.filter(r => r.id !== id);
+                await saveData();
+                renderStore();
+            }
+        }
+
+        function openRedeemModal(rewardId) {
+            const r = rewards.find(x => x.id === rewardId);
+            if (!r) return;
+            currentRewardForRedeem = r;
+
+            document.getElementById('redeem-title').innerText = `兌換：${r.icon} ${r.title} (${r.cost}點)`;
+            const list = document.getElementById('redeem-list');
+            list.innerHTML = '';
+
+            students.forEach(s => {
+                const canAfford = s.currentPoints >= r.cost;
+                const item = document.createElement('div');
+                item.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 0.6rem; border-bottom: 1px solid #E2E8F0;';
+                item.innerHTML = `
+                    <div>
+                        <span>${s.avatar} <strong>${s.name}</strong></span>
+                        <span style="font-size: 0.85rem; color: var(--text-muted); margin-left: 0.5rem;">(剩餘 ${s.currentPoints} pts)</span>
+                    </div>
+                    <button class="btn ${canAfford ? 'btn-primary' : 'btn-outline'}" 
+                            style="${!canAfford ? 'opacity: 0.5; cursor: not-allowed;' : ''}"
+                            ${!canAfford ? 'disabled' : ''} 
+                            onclick="redeemReward(${s.id})">
+                        ${canAfford ? '兌換' : '點數不足'}
+                    </button>
+                `;
+                list.appendChild(item);
+            });
+
+            document.getElementById('redeem-modal').classList.add('active');
+        }
+
+        async function redeemReward(studentId) {
+            if (!currentRewardForRedeem) return;
+            const s = students.find(x => x.id === studentId);
+            if (!s) return;
+
+            if (s.currentPoints < currentRewardForRedeem.cost) {
+                return alert('點數不足！');
+            }
+
+            s.currentPoints -= currentRewardForRedeem.cost;
+            addLog(s.name, `兌換獎勵：${currentRewardForRedeem.icon} ${currentRewardForRedeem.title}`, -currentRewardForRedeem.cost);
+            playSound(false);
+            await saveData();
+            renderAll();
+            closeModal('redeem-modal');
+            alert(`成功幫 ${s.name} 兌換「${currentRewardForRedeem.title}」！`);
+        }
+
+        /* 渲染畫面 - 歷史紀錄 */
+        function renderLogs() {
+            const body = document.getElementById('logs-body');
+            body.innerHTML = '';
+
+            if (logs.length === 0) {
+                body.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">尚無歷史變動紀錄</td></tr>`;
+                return;
+            }
+
+            logs.forEach(l => {
+                const tr = document.createElement('tr');
+                const isPos = String(l.delta).startsWith('+');
+                tr.innerHTML = `
+                    <td style="font-size: 0.85rem; color: var(--text-muted);">${l.time}</td>
+                    <td><strong>${l.student}</strong></td>
+                    <td>${l.reason}</td>
+                    <td style="font-weight: bold; color: ${isPos ? 'var(--success)' : 'var(--danger)'};">${l.delta}</td>
+                `;
+                body.appendChild(tr);
+            });
+        }
+
+        function exportCSV() {
+            if (logs.length === 0) return alert('目前沒有歷史紀錄可供匯出！');
+            let csvContent = "\uFEFF時間,學生姓名,項目/原因,點數變動\n";
+            logs.forEach(l => {
+                csvContent += `"${l.time}","${l.student}","${l.reason}","${l.delta}"\n`;
+            });
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `點數紀錄_${new Date().toISOString().slice(0,10)}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        /* 選擇與快速點數卡片操作 */
+        function toggleSelect(id, event) {
+            if (event) event.stopPropagation();
+            if (selectedStudentIds.has(id)) {
+                selectedStudentIds.delete(id);
+            } else {
+                selectedStudentIds.add(id);
+            }
+            renderStudents();
+        }
+
+        function toggleSelectAll() {
+            if (selectedStudentIds.size === students.length) {
+                selectedStudentIds.clear();
+            } else {
+                students.forEach(s => selectedStudentIds.add(s.id));
+            }
+            renderStudents();
+        }
+
+        async function quickPoint(id, delta, event) {
+            if (event) event.stopPropagation();
+            const s = students.find(x => x.id === id);
+            if (!s) return;
+            s.currentPoints += delta;
+            if (delta > 0) s.lifetimePoints += delta;
+            const reason = delta > 0 ? '快速加分' : '快速扣分';
+            addLog(s.name, reason, delta);
+            playSound(delta > 0);
+            await saveData();
+            renderStudents();
+            const card = document.getElementById(`card-${id}`);
+            showAnim(card, (delta > 0 ? '+' : '') + delta, delta > 0);
+        }
+
+        async function quickAll(delta) {
+            if (students.length === 0) return;
+            students.forEach(s => {
+                s.currentPoints += delta;
+                if (delta > 0) s.lifetimePoints += delta;
+                addLog(s.name, '全班加分', delta);
+            });
+            playSound(delta > 0);
+            await saveData();
+            renderStudents();
+        }
+
+        /* 彈窗控制 (加扣分行為彈窗) */
+        function openSingleModal(studentId) {
+            targetStudentId = studentId;
+            const s = students.find(x => x.id === studentId);
+            document.getElementById('modal-title').innerText = `為 ${s ? s.name : ''} 紀錄點數`;
+            populateBehaviorModal();
+            document.getElementById('behavior-modal').classList.add('active');
+        }
+
+        function openBatchModal() {
+            if (selectedStudentIds.size === 0) {
+                return alert('請先勾選欲進行紀錄的學生！');
+            }
+            targetStudentId = null;
+            document.getElementById('modal-title').innerText = `為選取的 ${selectedStudentIds.size} 位學生紀錄點數`;
+            populateBehaviorModal();
+            document.getElementById('behavior-modal').classList.add('active');
+        }
+
+        function populateBehaviorModal() {
+            const posList = document.getElementById('pos-behaviors');
+            const negList = document.getElementById('neg-behaviors');
+            posList.innerHTML = '';
+            negList.innerHTML = '';
+
+            behaviors.filter(b => b.type === 'pos').forEach(b => {
+                const div = document.createElement('div');
+                div.className = 'behavior-item';
+                div.innerHTML = `<span>${b.icon} ${b.title}</span><span style="color: var(--success);">+${b.value}</span>`;
+                div.onclick = () => applyBehavior(b.id);
+                posList.appendChild(div);
+            });
+
+            behaviors.filter(b => b.type === 'neg').forEach(b => {
+                const div = document.createElement('div');
+                div.className = 'behavior-item';
+                div.innerHTML = `<span>${b.icon} ${b.title}</span><span style="color: var(--danger);">${b.value}</span>`;
+                div.onclick = () => applyBehavior(b.id);
+                negList.appendChild(div);
+            });
+        }
+
+        async function applyBehavior(behaviorId) {
+            const b = behaviors.find(x => x.id === behaviorId);
+            if (!b) return;
+
+            if (targetStudentId !== null) {
+                const s = students.find(x => x.id === targetStudentId);
+                if (s) {
+                    s.currentPoints += b.value;
+                    if (b.value > 0) s.lifetimePoints += b.value;
+                    addLog(s.name, `${b.icon} ${b.title}`, b.value);
+                    const card = document.getElementById(`card-${s.id}`);
+                    showAnim(card, (b.value > 0 ? '+' : '') + b.value, b.value > 0);
+                }
+            } else {
+                selectedStudentIds.forEach(id => {
+                    const s = students.find(x => x.id === id);
+                    if (s) {
+                        s.currentPoints += b.value;
+                        if (b.value > 0) s.lifetimePoints += b.value;
+                        addLog(s.name, `${b.icon} ${b.title}`, b.value);
+                        const card = document.getElementById(`card-${s.id}`);
+                        showAnim(card, (b.value > 0 ? '+' : '') + b.value, b.value > 0);
+                    }
+                });
+            }
+
+            playSound(b.value > 0);
+            await saveData();
+            renderAll();
+            closeModal('behavior-modal');
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.remove('active');
+        }
+
+        function renderAll() {
+            renderStudents();
+            renderRoster();
+            renderBehaviors();
+            renderStore();
+            renderLogs();
+        }
+
+        /* 頁面載入初始化 */
+        window.addEventListener('DOMContentLoaded', () => {
+            renderAll();
+            loadDataFromCloud();
+        });
+    </script>
+</body>
+</html>
