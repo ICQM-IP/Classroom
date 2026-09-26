@@ -122,42 +122,82 @@
         }
         .anim-tag { position: absolute; top: 15%; left: 50%; transform: translateX(-50%); font-weight: 800; font-size: 1.2rem; pointer-events: none; animation: popUp 0.7s forwards; }
 
-        /* Compact classroom: seven columns, five rows; seating never writes score data. */
-        header { flex-wrap: wrap; gap: .5rem; padding: .6rem 1rem; }
-        nav { flex-wrap: wrap; }
-        .container { max-width: 1600px; margin: .6rem auto; }
-        #tab-tracker .toolbar { padding: .5rem .75rem; margin-bottom: .5rem; }
-        .classroom-heading { display:flex; align-items:center; justify-content:space-between; gap:.5rem; margin-bottom:.5rem; flex-wrap:wrap; }
-        .classroom-heading h1 { font-size:1.15rem; }
-        .seat-help { font-size:.8rem; color:var(--text-muted); }
-        .classroom { background:#edf2f7; padding:.6rem; border:1px solid #dce3ed; border-radius:1rem; overflow-x:auto; }
-        .student-grid { grid-template-columns:repeat(7,minmax(0,1fr)); grid-template-rows:repeat(5,minmax(82px,1fr)); gap:clamp(5px, .8vh, 10px); height:calc(100dvh - 280px); min-height:400px; min-width:700px; }
-        .seat { position:relative; min-width:0; border-radius:.65rem; }
-        .seat.empty { border:1px dashed #bdc9d9; display:flex; align-items:center; justify-content:center; color:#8190a5; font-size:.8rem; }
-        .seat.drop-target { outline:3px solid var(--primary); outline-offset:1px; }
-        .student-card { height:100%; padding:4px 6px; display:grid; grid-template-columns:30px 1fr; grid-template-rows:1fr 1fr 28px; align-items:center; column-gap:4px; border-radius:.65rem; }
-        .student-card:hover { transform:none; }
-        .student-card .avatar { font-size:1.5rem; margin:0; grid-row:1 / 3; }
-        .student-card .name { margin:0 20px 0 0; font-size:clamp(12px,1.1vw,16px); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:left; }
-        .student-card .pts-container { margin:0; justify-content:flex-start; }
-        .student-card .curr-pt { font-size:clamp(14px,1.35vw,20px)!important; padding:0 8px!important; }
-        .student-card .card-checkbox { top:6px; right:6px; left:auto; width:15px; height:15px; }
-        .student-card .quick-btns { grid-column:1 / 3; justify-content:stretch; }
-        .student-card .quick-btn { flex:1; padding:3px; }
-        .seat-number { position:absolute; left:5px; top:3px; font-size:9px; color:#94a3b8; pointer-events:none; }
-        .arranging .student-card { cursor:grab; border-style:dashed; }
+        /* A calm, spacious classroom with a compact desktop overview. */
+        :root { --primary:#177c70; --primary-hover:#106459; --success:#258977; --bg-slate:#f5f6f2; --text-main:#243b3a; --text-muted:#778784; }
+        body { background:radial-gradient(ellipse at 15% 0%,#e7f1e9,transparent 45%),#f5f6f2; }
+        header { padding:10px 22px; gap:8px; flex-wrap:wrap; background:#ffffffed; box-shadow:0 3px 20px #244b3b05; border-color:#dfe8e3; }
+        .logo { color:#285a50; letter-spacing:.03em; font-size:21px; }
+        nav { background:#edf2ef; border-radius:12px; padding:4px; }
+        .nav-btn { font-size:13px; padding:7px 12px; border-radius:8px; }
+        .nav-btn.active { color:#146b60; box-shadow:0 2px 5px #26483d12; }
+        #cloud-test-btn { font-size:11px; }
+        .sync-status { font-size:11px; }
+        .container { max-width:1760px; margin:12px auto; padding:0 20px; }
+        #tab-tracker .toolbar { padding:7px 10px; margin-bottom:10px; border-radius:13px; border-color:#e1e8e2; box-shadow:0 3px 10px #244b3b03; }
+        .btn { padding:7px 13px; border-radius:9px; font-size:13px; }
+        .btn-outline { border-color:#d5dfd9; }
+        .btn:disabled { opacity:.5; cursor:wait; }
+        .toolbar.muted label { opacity:.5; pointer-events:none; }
+        .classroom-heading { display:flex; justify-content:space-between; align-items:center; gap:12px; margin:0 2px 10px; }
+        .classroom-title { display:flex; align-items:center; gap:12px; }
+        .room-mark { width:43px; height:43px; display:grid; place-items:center; border-radius:13px; color:#fff; background:#317c6d; font-size:22px; font-weight:800; box-shadow:0 5px 12px #216b5422; }
+        .classroom-heading h1 { font-size:23px; letter-spacing:.03em; line-height:1.25; }
+        .class-meta { display:flex; gap:10px; margin-top:4px; align-items:center; font-size:11px; color:#7e8d85; }
+        .room-pill { padding:2px 7px; border-radius:5px; background:#e5eee6; color:#527667; }
+        .seat-help { font-size:12px; color:var(--text-muted); }
+        #seat-status { text-align:right; margin-top:5px; max-width:590px; }
+        #seat-status[data-state="saved"] { color:#21786a; }
+        #seat-status[data-state="error"] { color:#ba542b; }
+        #seat-status[data-state="draft"] { color:#a67625; }
+        .classroom { border:1px solid #dce5de; border-radius:20px; padding:12px; background:#edf2ec; box-shadow:0 10px 30px #30493606; overflow-x:auto; }
+        .student-grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); grid-template-rows:repeat(5,minmax(91px,1fr)); gap:9px; height:calc(100dvh - 285px); min-height:491px; min-width:850px; }
+        .seat { min-width:0; position:relative; border-radius:13px; }
+        .student-card { height:100%; position:relative; display:grid; grid-template-columns:46px minmax(0,1fr); grid-template-rows:minmax(27px,1fr) minmax(30px,1fr) 23px; column-gap:4px; padding:7px 9px 6px; border:1px solid #dfe7de; border-bottom:3px solid #d5e1d5; border-radius:13px; background:#fff; box-shadow:0 3px 5px #2b443704; text-align:left; transition:box-shadow .15s,border-color .15s; }
+        .student-card:hover { transform:none; border-color:#83b5a5; box-shadow:0 4px 12px #346d4b12; }
+        .student-card.selected { border-color:#2b8c75; background:#eef9f3; }
+        .student-card .avatar { grid-row:1 / 3; grid-column:1; font-size:40px; margin:0; align-self:center; line-height:1.2; text-align:center; }
+        .student-card .name { grid-row:1; grid-column:2; margin:0; font-size:clamp(18px,1.45vw,24px); font-weight:750; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; line-height:1.3; align-self:end; letter-spacing:.01em; }
+        .student-card .pts-container { grid-row:2; grid-column:2; justify-content:flex-start; align-items:center; gap:4px; margin:0; line-height:1; }
+        .student-card .curr-pt { padding:0; background:none; color:#237c68; font-size:clamp(25px,2.2vw,34px)!important; font-weight:800; letter-spacing:-.02em; font-variant-numeric:tabular-nums; }
+        .student-card .pts-container small { font-size:11px; color:#91a198; font-weight:500; padding-top:6px; }
+        .student-card .card-checkbox { width:12px; height:12px; top:5px; left:5px; accent-color:#278670; opacity:.45; }
+        .student-card:hover .card-checkbox,.student-card.selected .card-checkbox { opacity:1; }
+        .quick-btns { grid-column:1 / 3; display:flex; gap:5px; }
+        .quick-btn { flex:1; font-size:13px; line-height:19px; padding:0; border-radius:5px; }
+        .q-add { background:#edf6ef; color:#328265; }
+        .q-sub { background:#fbf0e9; color:#b97b60; }
+        .q-add:hover { background:#d7efdf; } .q-sub:hover { background:#f8dfd2; }
+        .seat.empty { border:1px dashed #cdd9cb; background:#ffffff30; display:flex; align-items:center; justify-content:center; gap:6px; color:#a2b09f; font-size:11px; }
+        .empty-number { font-size:20px; font-weight:500; color:#b6c3b1; }
+        .arranging .student-card { cursor:grab; border:1px dashed #71a992; user-select:none; }
         .arranging .student-card:active { cursor:grabbing; }
-        .arranging .student-card.picked { outline:3px solid #f59e0b; }
-        .arranging .quick-btns, .arranging .card-checkbox { visibility:hidden; }
-        .student-card:focus-visible, .seat:focus-visible { outline:3px solid #f59e0b; }
-        .classroom-footer { display:flex; justify-content:space-between; align-items:center; gap:1rem; margin-top:.5rem; min-width:700px; }
-        .teacher-desk { display:flex; align-items:center; gap:.65rem; background:#fff5df; border:1px solid #e9cf92; border-bottom:4px solid #d9b96f; border-radius:.6rem; padding:.45rem .7rem; }
-        .teacher-desk label { display:flex; align-items:center; gap:.3rem; }
-        .teacher-desk input { width:90px; padding:.25rem; background:white; }
-        #seat-overflow { display:grid; grid-template-columns:repeat(7,minmax(100px,1fr)); gap:.5rem; }
-        #seat-overflow:not(:empty) { margin-top:.7rem; }
-        #seat-overflow .seat { height:100px; }
-        @media (max-width:800px) { header { position:static; } .classroom-heading { align-items:flex-start; } .student-grid { height:500px; } .container { padding:0 .5rem; } }
+        .arranging .quick-btns,.arranging .card-checkbox { visibility:hidden; }
+        .student-card.dragging { opacity:.45; }
+        .seat.drop-target { outline:3px solid #339979; outline-offset:2px; background:#ddf1e5; }
+        .student-card.picked { outline:3px solid #d5a347; outline-offset:1px; }
+        .seat:focus-visible { outline:3px solid #d5a347; }
+        .classroom-footer { display:flex; justify-content:space-between; align-items:center; margin-top:10px; gap:20px; min-width:850px; }
+        .room-note { display:flex; align-items:center; gap:12px; padding-left:8px; }
+        .room-note-icon { font-size:28px; }
+        .room-note strong { display:block; font-size:14px; color:#688574; margin-bottom:3px; }
+        .room-note span { font-size:11px; color:#91a08e; }
+        .teacher-desk { display:flex; align-items:center; gap:14px; padding:7px 10px; border:1px solid #e3d2af; border-bottom:4px solid #d6bd8c; border-radius:14px; background:#f6ecda; min-width:470px; }
+        .desk-label { font-size:14px; color:#9c8053; white-space:nowrap; }
+        .desk-label small { display:block; margin-top:3px; font-size:9px; letter-spacing:.13em; opacity:.8; }
+        #teacher-seats { flex:1; display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+        #teacher-seats .seat { height:79px; }
+        #teacher-seats .student-card { grid-template-columns:37px minmax(0,1fr); grid-template-rows:23px 26px 17px; padding:5px 7px; border-color:#e7d6b8; background:#fffdf8; }
+        #teacher-seats .avatar { font-size:31px; }
+        #teacher-seats .name { font-size:19px; }
+        #teacher-seats .curr-pt { font-size:25px!important; color:#a47b38; }
+        #teacher-seats .quick-btn { font-size:11px; line-height:15px; }
+        #seat-overflow { display:grid; grid-template-columns:repeat(7,minmax(120px,1fr)); gap:9px; }
+        #seat-overflow:not(:empty) { margin-top:9px; }
+        #seat-overflow .seat { height:108px; }
+        #overflow-label { margin-top:10px; }
+        [hidden] { display:none!important; }
+        @media (max-height:780px) and (min-width:1000px) { .container { margin:7px auto; } header { padding:4px 20px; } #tab-tracker .toolbar { padding:4px 8px; margin-bottom:6px; } .classroom-heading .btn { padding:5px 12px; } .classroom-title .room-mark { width:38px; height:38px; } .classroom-heading h1 { font-size:22px; } .classroom-heading { margin-bottom:7px; } .classroom { padding:9px; } .student-grid { min-height:440px; grid-template-rows:repeat(5,minmax(82px,1fr)); height:calc(100dvh - 300px); gap:7px; } .student-card { padding:3px 8px; grid-template-rows:24px 27px 20px; } .student-card .avatar { font-size:37px; } .classroom-footer { margin-top:7px; } #teacher-seats .seat { height:71px; } #teacher-seats .student-card { grid-template-rows:20px 23px 16px; padding:4px 6px; } }
+        @media (max-width:999px) { header { position:static; } .container { padding:0 10px; } .classroom-heading { flex-wrap:wrap; } #seat-status { text-align:left; } .student-grid { height:540px; } .student-card .name { font-size:18px; } .student-card .avatar { font-size:34px; } .student-card .curr-pt { font-size:27px!important; } }
     </style>
 </head>
 <body>
@@ -195,20 +235,17 @@
                 </div>
             </div>
             <div class="classroom-heading">
-                <div><h1>班級座位表 <span class="seat-help">7 欄 × 5 排</span></h1><p class="seat-help" id="seat-status" role="status">點選學生計分；按「調整座位」拖曳換位。</p></div>
-                <button class="btn btn-outline" id="seat-edit" onclick="toggleSeatEdit()" aria-pressed="false">調整座位</button>
+                <div class="classroom-title"><div class="room-mark">3C</div><div><h1>我們的課室</h1><div class="class-meta"><span id="class-count">班級座位表</span><span class="room-pill">7 欄 × 5 排</span></div></div></div>
+                <div><div class="btn-group" style="justify-content:flex-end"><button class="btn btn-outline" id="seat-cancel" onclick="cancelSeatEdit()" hidden>取消</button><button class="btn btn-primary" id="seat-edit" onclick="toggleSeatEdit()" aria-pressed="false">調整座位</button></div><p class="seat-help" id="seat-status" role="status">正在載入雲端座位…</p></div>
             </div>
             <div class="classroom">
                 <div class="student-grid" id="student-grid" aria-label="7 欄 5 排學生座位表"></div>
                 <div class="classroom-footer">
-                    <span class="seat-help">座位及老師姓名儲存在此瀏覽器</span>
-                    <div class="teacher-desk" aria-label="兩人老師桌"><strong>老師桌</strong>
-                        <label>🧑‍🏫 <input id="teacher-0" aria-label="第一位老師姓名" placeholder="老師 1" maxlength="20" onchange="saveTeacherNames()"></label>
-                        <label>🧑‍🏫 <input id="teacher-1" aria-label="第二位老師姓名" placeholder="老師 2" maxlength="20" onchange="saveTeacherNames()"></label>
-                    </div>
+                    <div class="room-note"><div class="room-note-icon">🌱</div><div><strong>每天進步一點點</strong><span>點選卡片記錄表現，一起累積成長。</span></div></div>
+                    <div class="teacher-desk" aria-label="兩人老師桌"><div class="desk-label">老師桌<small>TEACHERS</small></div><div id="teacher-seats"></div></div>
                 </div>
             </div>
-            <p id="overflow-label" class="seat-help" hidden>待安排學生（35 個座位已滿，可拖曳至座位交換）</p>
+            <p id="overflow-label" class="seat-help" hidden>待安排人物 · 可拖曳到空位，或與現有座位交換</p>
             <div id="seat-overflow"></div>
         </div>
 
@@ -488,6 +525,7 @@
                 if (Array.isArray(data.rewards) && data.rewards.length > 0) rewards = data.rewards;
                 if (Array.isArray(data.behaviors) && data.behaviors.length > 0) behaviors = data.behaviors;
                 if (Array.isArray(data.logs)) logs = data.logs;
+                acceptCloudSeating(data.seating);
 
                 localStorage.setItem('v5_students', JSON.stringify(students));
                 localStorage.setItem('v5_rewards', JSON.stringify(rewards));
@@ -499,6 +537,7 @@
             } catch (e) {
                 console.error('雲端載入失敗，使用本機紀錄', e);
                 setSyncStatus(false, '離線模式（使用本機紀錄）');
+                setSeatStatus('未能讀取雲端座位，請檢查網絡後再試。', 'error');
             }
         }
 
@@ -773,134 +812,191 @@
             renderAll();
         }
 
-        // Separate UI-only storage: never call saveData or mutate students here.
-        const SEATING_KEY = 'classroom_seating_v1';
-        const TEACHERS_KEY = 'classroom_teachers_v1';
-        function readLayout(key) {
-            try { const value = JSON.parse(localStorage.getItem(key)); return Array.isArray(value) ? value : []; }
-            catch (_) { return []; }
-        }
-        let seatIds = readLayout(SEATING_KEY);
-        let seatEditing = false;
+        // Seat numbers live in a separate Google Sheet cell; no scoring writes here.
+        const SEATING_CACHE_KEY = 'classroom_cloud_seating_v2';
+        const TEACHER_IDS = new Set(['1787571771840','1787571916809']);
+        let seatIds = Array(37).fill(null);
+        let cloudSeating = {version:0, positions:[]};
+        let seatEditing = false, seatBusy = false, seatsReady = false;
         let pickedStudentId = null;
-        let draggingStudentId = null;
-        function reconcileSeats() {
-            const valid = new Set(students.map(s => String(s.id)));
-            const used = new Set();
-            seatIds = Array.from({length:35}, (_, i) => {
-                const id = seatIds[i] == null ? null : String(seatIds[i]);
-                if (!valid.has(id) || used.has(id)) return null;
-                used.add(id); return id;
+        let lastSeatRequest = null;
+        function isTeacher(s) { return !!s && TEACHER_IDS.has(String(s.id)); }
+        function setSeatStatus(message, state='') {
+            const el = document.getElementById('seat-status');
+            el.textContent = message; el.dataset.state = state;
+        }
+        function layoutFromPositions(positions) {
+            const slots = Array(37).fill(null), used = new Set();
+            const roster = new Map(students.map(s=>[String(s.id),s]));
+            (Array.isArray(positions)?positions:[]).forEach(p => {
+                const id=String(p.id), s=roster.get(id);
+                if (!s || used.has(id) || !Number.isInteger(p.seat) || p.seat<0 || p.seat>37) return;
+                if (p.seat===0) { used.add(id); return; }
+                if (slots[p.seat-1] !== null || (p.seat>35 && !isTeacher(s))) return;
+                slots[p.seat-1]=id; used.add(id);
             });
-            students.forEach(s => {
-                const id = String(s.id), empty = seatIds.indexOf(null);
-                if (!used.has(id) && empty !== -1) { seatIds[empty] = id; used.add(id); }
+            students.forEach(s=> {
+                const id=String(s.id); if(used.has(id)) return;
+                let empty=isTeacher(s)?slots.findIndex((v,i)=>i>=35 && v===null):-1;
+                if(empty===-1) empty=slots.findIndex((v,i)=>i<35 && v===null);
+                if(empty!==-1) slots[empty]=id;
+                used.add(id);
             });
+            return slots;
         }
-        function saveLayout(key, value) {
-            try { localStorage.setItem(key, JSON.stringify(value)); return true; }
-            catch (_) { document.getElementById('seat-status').textContent = '瀏覽器未能儲存位置，重新整理後可能遺失本次安排。'; return false; }
+        function acceptCloudSeating(value) {
+            cloudSeating = value && !Array.isArray(value) && Number.isInteger(value.version) && Array.isArray(value.positions)
+                ? value : {version:0,positions:[]};
+            seatIds=layoutFromPositions(cloudSeating.positions);
+            seatsReady=true;
+            try { localStorage.setItem(SEATING_CACHE_KEY,JSON.stringify(cloudSeating)); } catch (_) {}
+            setSeatStatus('座位已與 Google Sheet 同步', 'saved');
         }
-        function saveTeacherNames() {
-            saveLayout(TEACHERS_KEY, [0,1].map(i => document.getElementById('teacher-'+i).value));
+        async function fetchClassroomState() {
+            const response=await fetch(GAS_URL+(GAS_URL.includes('?')?'&':'?')+'seats='+Date.now(),{cache:'no-store'});
+            if(!response.ok) throw new Error('雲端讀取失敗');
+            const data=await response.json();
+            if(data.status==='error' || !Array.isArray(data.students)) throw new Error('雲端資料無法讀取');
+            return data;
         }
-        function toggleSeatEdit() {
-            seatEditing = !seatEditing; pickedStudentId = null; draggingStudentId = null;
-            document.getElementById('seat-edit').textContent = seatEditing ? '完成座位安排' : '調整座位';
-            document.getElementById('seat-edit').setAttribute('aria-pressed', String(seatEditing));
-            document.getElementById('seat-status').textContent = seatEditing ? '拖曳學生換位；也可先點學生，再點目的座位。位置自動儲存，分數保持不變。' : '點選學生計分；按「調整座位」拖曳換位。';
-            renderStudents();
+        function sameRoster(data) {
+            const ids=data.students.map(s=>String(s.id)).sort();
+            return JSON.stringify(ids)===JSON.stringify(students.map(s=>String(s.id)).sort());
         }
-        function moveToSeat(id, target) {
-            if (!seatEditing || id == null || !students.some(s => String(s.id) === id)) return;
-            reconcileSeats();
-            const from = seatIds.indexOf(id);
-            if (!Number.isInteger(target) || target < 0 || target >= 35) return;
-            const displaced = seatIds[target];
-            seatIds[target] = id;
-            if (from !== -1) seatIds[from] = displaced;
-            pickedStudentId = null; draggingStudentId = null;
-            saveLayout(SEATING_KEY, seatIds);
+        async function refreshSeats() {
+            if(seatEditing || seatBusy || !GAS_URL) return;
+            try {
+                const data=await fetchClassroomState();
+                if(seatEditing || seatBusy) return;
+                if(!sameRoster(data)) { setSeatStatus('名單已有更新，請重新整理頁面。','error'); return; }
+                acceptCloudSeating(data.seating); renderStudents();
+            } catch (_) { setSeatStatus('暫時離線，顯示上次座位安排。','error'); }
+        }
+        async function toggleSeatEdit() {
+            if(seatBusy) return;
+            if(seatEditing) { await saveSeatsToCloud(); return; }
+            seatBusy=true; updateSeatControls();
+            setSeatStatus('正在讀取最新座位…');
+            try {
+                await waitForCloudSave();
+                const data=await fetchClassroomState();
+                if(!sameRoster(data)) throw new Error('名單已有更新，請重新整理頁面後再安排座位。');
+                acceptCloudSeating(data.seating);
+                seatEditing=true; pickedStudentId=null;
+                setSeatStatus('拖曳換位，或先點人物再點目的位置；完成後按「儲存座位」。');
+            } catch(e) { setSeatStatus(e.message || '未能連接雲端，請稍後重試。','error'); }
+            finally { seatBusy=false; renderStudents(); }
+        }
+        function cancelSeatEdit() {
+            if(seatBusy) return;
+            seatEditing=false; pickedStudentId=null;
+            seatIds=layoutFromPositions(cloudSeating.positions);
+            setSeatStatus('已取消本次調整，保留雲端座位。'); renderStudents();
+        }
+        function currentPositions() { return students.map(s=>({id:String(s.id),seat:seatIds.indexOf(String(s.id))+1})); }
+        async function saveSeatsToCloud() {
+            if(!seatEditing || seatBusy) return;
+            seatBusy=true; updateSeatControls(); setSeatStatus('正在儲存座位到 Google Sheet…');
+            try {
+                // Reconcile uncertain prior saves before retrying; no blind overwrites.
+                const latest=await fetchClassroomState();
+                if(!sameRoster(latest)) throw new Error('名單已有更新，請取消調整並重新整理頁面。');
+                const remote=latest.seating || {};
+                if(lastSeatRequest && remote.requestId===lastSeatRequest.requestId && JSON.stringify(currentPositions())===JSON.stringify(lastSeatRequest.positions)) {
+                    acceptCloudSeating(remote); seatEditing=false; lastSeatRequest=null; return;
+                }
+                if((remote.version||0)!==cloudSeating.version) {
+                    acceptCloudSeating(remote); seatEditing=false;
+                    setSeatStatus('另一個瀏覽器已更新座位，已載入最新安排，請再調整。','error'); return;
+                }
+                const request={__seatingOnly:true,baseVersion:cloudSeating.version,requestId:'seat-'+Date.now()+'-'+Math.random().toString(36).slice(2),positions:currentPositions()};
+                lastSeatRequest=request;
+                await fetch(GAS_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(request)});
+                for(let attempt=0;attempt<5;attempt++) {
+                    if(attempt) await new Promise(resolve=>setTimeout(resolve,800));
+                    const readback=await fetchClassroomState();
+                    if(readback.seating?.requestId===request.requestId) {
+                        acceptCloudSeating(readback.seating); seatEditing=false; pickedStudentId=null; lastSeatRequest=null;
+                        setSeatStatus('座位已儲存，所有瀏覽器會使用同一安排。','saved'); return;
+                    }
+                    if((readback.seating?.version||0)!==request.baseVersion) {
+                        acceptCloudSeating(readback.seating); seatEditing=false;
+                        setSeatStatus('另一個瀏覽器剛更新了座位，已載入最新安排。','error'); return;
+                    }
+                }
+                throw new Error('尚未確認雲端儲存，請保留此頁並按「儲存座位」重試。');
+            } catch(e) { setSeatStatus(e.message || '儲存失敗，請重試。','error'); }
+            finally { seatBusy=false; renderStudents(); }
+        }
+        function updateSeatControls() {
+            const button=document.getElementById('seat-edit');
+            button.textContent=seatBusy?'同步中…':seatEditing?'儲存座位':'調整座位';
+            button.disabled=seatBusy; button.setAttribute('aria-pressed',String(seatEditing));
+            document.getElementById('seat-cancel').hidden=!seatEditing;
+            document.getElementById('seat-cancel').disabled=seatBusy;
+            document.querySelectorAll('#tab-tracker .toolbar button,#tab-tracker .toolbar input').forEach(el=>el.disabled=seatEditing||seatBusy);
+            document.querySelector('#tab-tracker .toolbar').classList.toggle('muted',seatEditing||seatBusy);
+        }
+        function moveToSeat(id,target) {
+            if(!seatEditing || seatBusy || id==null || !Number.isInteger(target) || target<0 || target>36) return;
+            const s=students.find(s=>String(s.id)===id); if(!s) return;
+            const from=seatIds.indexOf(id), displaced=seatIds[target];
+            if(target>=35 && !isTeacher(s)) { setSeatStatus('老師桌只供 Mr. IP 和 Ms. Lam 使用。','error'); return; }
+            if(from>=35 && displaced && !TEACHER_IDS.has(displaced)) { setSeatStatus('請先將學生移到其他座位，再把老師移到這裡。','error'); return; }
+            seatIds[target]=id; if(from!==-1) seatIds[from]=displaced;
+            pickedStudentId=null;
+            setSeatStatus('座位已調整，按「儲存座位」同步到所有瀏覽器。','draft');
             renderStudents();
         }
         function renderStudents() {
-            reconcileSeats();
-            const grid = document.getElementById('student-grid');
-            const overflow = document.getElementById('seat-overflow');
-            grid.replaceChildren(); overflow.replaceChildren();
-            grid.classList.toggle('arranging', seatEditing);
-            overflow.classList.toggle('arranging', seatEditing);
-            function makeSeat(s, index) {
-                const seat = document.createElement('div');
-                seat.className = 'seat' + (s ? '' : ' empty');
-                const label = index == null ? '待安排' : `${Math.floor(index/7)+1} 排 ${index%7+1} 號`;
-                seat.setAttribute('aria-label', label);
-                if (seatEditing) {
-                    seat.tabIndex = 0;
-                    seat.setAttribute('role', 'button');
-                    seat.setAttribute('aria-label', label + (s ? ' '+s.name : ' 空位'));
-                }
-                const activate = () => {
-                    if (!seatEditing) return;
-                    if (pickedStudentId !== null && index != null) moveToSeat(pickedStudentId, index);
-                    else if (s) { pickedStudentId = String(s.id); renderStudents(); document.getElementById('seat-status').textContent = `已選取 ${s.name}，請點選目的座位。`; }
+            if(!seatsReady && !seatEditing) {
+                try { const cached=JSON.parse(localStorage.getItem(SEATING_CACHE_KEY)); seatIds=layoutFromPositions(cached?.positions); }
+                catch(_) { seatIds=layoutFromPositions([]); }
+            } else if(!seatEditing) seatIds=layoutFromPositions(cloudSeating.positions);
+            const grid=document.getElementById('student-grid'),overflow=document.getElementById('seat-overflow'),desk=document.getElementById('teacher-seats');
+            [grid,overflow,desk].forEach(el=>{el.replaceChildren();el.classList.toggle('arranging',seatEditing);});
+            function makeSeat(s,index) {
+                const seat=document.createElement('div'); seat.className='seat'+(s?'':' empty')+(index>=35?' teacher-seat':'');
+                if(index!=null) seat.dataset.seat=String(index);
+                const label=index==null?'待安排':index>=35?'老師桌 '+(index-34):'第 '+(Math.floor(index/7)+1)+' 排，第 '+(index%7+1)+' 位';
+                seat.setAttribute('aria-label',label+(s?' '+s.name:' 空位'));
+                if(seatEditing) {seat.tabIndex=0;seat.setAttribute('role','button');}
+                const activate=()=> {
+                    if(!seatEditing || seatBusy) return;
+                    if(pickedStudentId!==null && index!=null) moveToSeat(pickedStudentId,index);
+                    else if(s) {pickedStudentId=String(s.id);renderStudents();setSeatStatus('已選取 '+s.name+'，請點選目的位置。');}
                 };
-                seat.onclick = activate;
-                seat.onkeydown = e => { if (seatEditing && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); activate(); } if (e.key === 'Escape') { pickedStudentId = null; renderStudents(); } };
-                seat.ondragover = e => { if (seatEditing && draggingStudentId !== null && index != null) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; seat.classList.add('drop-target'); } };
-                seat.ondragleave = () => seat.classList.remove('drop-target');
-                seat.ondrop = e => { e.preventDefault(); seat.classList.remove('drop-target'); if (index != null) moveToSeat(draggingStudentId, index); };
-                if (!s) { seat.textContent = label + ' · 空位'; return seat; }
-                const card = document.createElement('div');
-                card.className = 'student-card' + (selectedStudentIds.has(s.id) ? ' selected' : '') + (pickedStudentId === String(s.id) ? ' picked' : '');
-                card.id = `card-${s.id}`;
-                card.draggable = seatEditing;
-                card.ondragstart = e => { if (!seatEditing) { e.preventDefault(); return; } draggingStudentId = String(s.id); e.dataTransfer.setData('text/plain', String(s.id)); e.dataTransfer.effectAllowed = 'move'; };
-                card.ondragend = () => { draggingStudentId = null; document.querySelectorAll('.drop-target').forEach(el => el.classList.remove('drop-target')); };
-                // Pointer dragging also supports touch screens and trackpads.
-                card.style.touchAction = seatEditing ? 'none' : 'auto';
-                card.onpointerdown = e => {
-                    if (!seatEditing || e.button !== 0) return;
-                    const x = e.clientX, y = e.clientY;
-                    let moved = false;
+                seat.onclick=activate;
+                seat.onkeydown=e=>{if(seatEditing && (e.key==='Enter'||e.key===' ')){e.preventDefault();activate();}if(e.key==='Escape'){pickedStudentId=null;renderStudents();}};
+                if(!s) {const num=document.createElement('span');num.className='empty-number';num.textContent=index>=35?'＋':String(index+1).padStart(2,'0');const hint=document.createElement('span');hint.textContent=index>=35?'拖曳老師到這裡':'空位';seat.append(num,hint);return seat;}
+                const card=document.createElement('div');card.className='student-card'+(isTeacher(s)?' is-teacher':'')+(selectedStudentIds.has(s.id)?' selected':'')+(pickedStudentId===String(s.id)?' picked':'');card.id='card-'+s.id;
+                card.style.touchAction=seatEditing?'none':'auto';
+                card.onpointerdown=e=>{
+                    if(!seatEditing || seatBusy || e.button!==0) return;
+                    const x=e.clientX,y=e.clientY;let moved=false;
                     card.setPointerCapture(e.pointerId);
-                    card.onpointermove = ev => {
-                        if (Math.hypot(ev.clientX-x, ev.clientY-y) > 6) moved = true;
-                        if (!moved) return;
-                        document.querySelectorAll('.drop-target').forEach(el => el.classList.remove('drop-target'));
-                        const target = document.elementFromPoint(ev.clientX,ev.clientY)?.closest('#student-grid > .seat');
-                        if (target) target.classList.add('drop-target');
-                    };
-                    card.onpointerup = ev => {
-                        card.onpointermove = null; card.onpointerup = null;
-                        document.querySelectorAll('.drop-target').forEach(el => el.classList.remove('drop-target'));
-                        if (!moved) return;
-                        const target = document.elementFromPoint(ev.clientX,ev.clientY)?.closest('#student-grid > .seat');
-                        ev.preventDefault(); ev.stopPropagation();
-                        if (target) moveToSeat(String(s.id), Array.from(grid.children).indexOf(target));
-                    };
-                    card.onpointercancel = () => { card.onpointermove = null; card.onpointerup = null; document.querySelectorAll('.drop-target').forEach(el => el.classList.remove('drop-target')); };
+                    const clear=()=>document.querySelectorAll('.drop-target').forEach(el=>el.classList.remove('drop-target'));
+                    card.onpointermove=ev=>{if(Math.hypot(ev.clientX-x,ev.clientY-y)>6)moved=true;if(!moved)return;card.classList.add('dragging');clear();document.elementFromPoint(ev.clientX,ev.clientY)?.closest('[data-seat]')?.classList.add('drop-target');};
+                    const finish=()=>{card.onpointermove=null;card.onpointerup=null;card.classList.remove('dragging');clear();};
+                    card.onpointerup=ev=>{finish();if(!moved)return;ev.preventDefault();ev.stopPropagation();const target=document.elementFromPoint(ev.clientX,ev.clientY)?.closest('[data-seat]');if(target)moveToSeat(String(s.id),Number(target.dataset.seat));};
+                    card.onpointercancel=finish;
                 };
-                card.draggable = false;
-                card.onclick = e => { if (!seatEditing && !e.target.closest('input,button')) openSingleModal(s.id); };
-                const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.className = 'card-checkbox'; checkbox.checked = selectedStudentIds.has(s.id); checkbox.disabled = seatEditing;
-                checkbox.setAttribute('aria-label', '選取 '+s.name); checkbox.onchange = e => toggleSelect(s.id,e);
-                const avatar = document.createElement('div'); avatar.className = 'avatar'; avatar.textContent = s.avatar;
-                const name = document.createElement('div'); name.className = 'name'; name.textContent = s.name; name.title = s.name;
-                const points = document.createElement('div'); points.className = 'pts-container';
-                const badge = document.createElement('span'); badge.className = 'pt-badge curr-pt'; badge.textContent = s.currentPoints+' pts'; points.append(badge);
-                const buttons = document.createElement('div'); buttons.className = 'quick-btns';
-                [1,-1].forEach(delta => { const btn = document.createElement('button'); btn.className = 'quick-btn '+(delta===1?'q-add':'q-sub'); btn.textContent = delta===1?'+1':'−1'; btn.disabled=seatEditing; btn.setAttribute('aria-label',s.name+(delta===1?' 加 1 分':' 扣 1 分')); btn.onclick = e => { if (!seatEditing) quickPoint(s.id,delta,e); }; buttons.append(btn); });
-                card.append(checkbox,avatar,name,points,buttons); seat.append(card); return seat;
+                card.onclick=e=>{if(!seatEditing&&!seatBusy&&!e.target.closest('input,button'))openSingleModal(s.id);};
+                const checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.className='card-checkbox';checkbox.checked=selectedStudentIds.has(s.id);checkbox.disabled=seatEditing||seatBusy;checkbox.setAttribute('aria-label','選取 '+s.name);checkbox.onchange=e=>toggleSelect(s.id,e);
+                const avatar=document.createElement('div');avatar.className='avatar';avatar.textContent=s.avatar;
+                const name=document.createElement('div');name.className='name';name.textContent=s.name;name.title=s.name;
+                const points=document.createElement('div');points.className='pts-container';const badge=document.createElement('span');badge.className='pt-badge curr-pt';badge.textContent=s.currentPoints;const unit=document.createElement('small');unit.textContent='分';points.append(badge,unit);
+                const buttons=document.createElement('div');buttons.className='quick-btns';
+                [1,-1].forEach(delta=>{const btn=document.createElement('button');btn.className='quick-btn '+(delta===1?'q-add':'q-sub');btn.textContent=delta===1?'+1':'−1';btn.disabled=seatEditing||seatBusy;btn.setAttribute('aria-label',s.name+(delta===1?' 加 1 分':' 扣 1 分'));btn.onclick=e=>{if(!seatEditing&&!seatBusy)quickPoint(s.id,delta,e);};buttons.append(btn);});
+                card.append(checkbox,avatar,name,points,buttons);seat.append(card);return seat;
             }
-            seatIds.forEach((id,index) => grid.append(makeSeat(students.find(s => String(s.id) === id),index)));
-            const extras = students.filter(s => !seatIds.includes(String(s.id)));
-            extras.forEach(s => overflow.append(makeSeat(s,null)));
-            document.getElementById('overflow-label').hidden = extras.length === 0;
-            document.getElementById('select-cnt').innerText = selectedStudentIds.size;
-            const teachers = readLayout(TEACHERS_KEY);
-            [0,1].forEach(i => { const input = document.getElementById('teacher-'+i); if (document.activeElement !== input) input.value = typeof teachers[i] === 'string' ? teachers[i] : ''; });
+            seatIds.forEach((id,index)=>{const s=students.find(s=>String(s.id)===id);(index<35?grid:desk).append(makeSeat(s,index));});
+            const extras=students.filter(s=>!seatIds.includes(String(s.id)));extras.forEach(s=>overflow.append(makeSeat(s,null)));document.getElementById('overflow-label').hidden=extras.length===0;
+            document.getElementById('select-cnt').innerText=selectedStudentIds.size;
+            document.getElementById('class-count').textContent=students.filter(s=>!isTeacher(s)).length+' 位學生 · 2 位老師';
+            updateSeatControls();
         }
+        window.addEventListener('focus',()=>{if(seatsReady)refreshSeats();});
 
         /* 渲染畫面 - 學生名冊 */
         function renderRoster() {
