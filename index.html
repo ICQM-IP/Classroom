@@ -214,6 +214,37 @@
         [hidden] { display:none!important; }
         @media (max-height:780px) and (min-width:1000px) { .container { margin:7px auto; } header { padding:4px 20px; } #tab-tracker .toolbar { padding:4px 8px; margin-bottom:6px; } .classroom-heading .btn { padding:5px 12px; } .classroom-title .room-mark { width:38px; height:38px; } .classroom-heading h1 { font-size:22px; } .classroom-heading { margin-bottom:7px; } .classroom { padding:9px; } .student-grid { min-height:440px; grid-template-rows:repeat(5,minmax(82px,1fr)); height:calc(100dvh - 300px); gap:7px; } .student-card { padding:3px 8px; grid-template-rows:24px 27px 20px; } .student-card .avatar { font-size:37px; } .classroom-footer { margin-top:7px; } #teacher-seats .seat { height:71px; } #teacher-seats .student-card { grid-template-rows:20px 23px 16px; padding:4px 6px; } }
         @media (max-width:999px) { header { position:static; } .container { padding:0 10px; } .classroom-heading { flex-wrap:wrap; } #seat-status { text-align:left; } .student-grid { height:540px; } .student-card .name { font-size:18px; } .student-card .avatar { font-size:34px; } .student-card .curr-pt { font-size:27px!important; } }
+        /* 溫暖課室主題 */
+        body { background: #fbf7ee; background-image: radial-gradient(#eadfca 1px, transparent 1px); background-size: 22px 22px; }
+        header { background:#fffdf8; border-bottom:3px solid #e7d7b8; box-shadow:0 4px 16px #806b4512; }
+        .logo { color:#6b5740; letter-spacing:.04em; }
+        nav { background:#f3eadb; }
+        .nav-btn { color:#8b7356; }
+        .nav-btn.active { background:#fffaf0; color:#a06b37; box-shadow:0 2px 6px #806b451f; }
+        .toolbar { background:#fffdf8; border-color:#eadfcf; box-shadow:0 5px 16px #806b4510; }
+        .classroom-heading h1 { color:#5f735d; }
+        .room-mark { background:#d28b58; box-shadow:0 5px 12px #a968382c; }
+        .classroom { border-color:#dfd0b5; background:#f0eadc; box-shadow:0 12px 30px #806b4518; }
+        .student-card { border-color:#eadfce; border-bottom-color:#d8c5a5; background:#fffdf9; box-shadow:0 4px 8px #806b4512; }
+        .student-card:hover { border-color:#d99b68; box-shadow:0 7px 16px #a9683820; }
+        .student-card.selected { border-color:#d28b58; background:#fff4e8; }
+        .student-card:nth-child(4n+1) { background:#fffdf8; }
+        .student-card:nth-child(4n+2) { background:#f8fcf2; }
+        .student-card:nth-child(4n+3) { background:#fff8ee; }
+        .student-card:nth-child(4n) { background:#f5fbf7; }
+        .curr-pt { color:#a06b37!important; }
+        .room-note { padding:10px 16px; border:2px solid #e5c990; border-radius:14px; background:#fff7df; box-shadow:0 4px 0 #e8d4a9; }
+        .room-note-icon { font-size:34px; }
+        .room-note strong { color:#a66d3d; font-size:16px; }
+        .room-note span { color:#9b8264; font-size:12px; }
+        .teacher-desk { border-color:#c99b60; border-bottom-color:#a9783f; background:#e8c891; box-shadow:0 5px 0 #c3985d; }
+        .desk-label { color:#76512e; }
+        .q-add { background:#dff1df; color:#39754f; }
+        .q-sub { background:#fbe3d3; color:#a95c3d; }
+        #behavior-grid .store-card { border-top:4px solid #8fc8a2; background:#f7fff8; }
+        #store-grid .store-card { border-top:4px solid #e7b46b; background:#fffaf0; }
+        .store-card { border-color:#eadfcf; box-shadow:0 4px 10px #806b4510; }
+        .store-card:hover { transform:translateY(-3px); box-shadow:0 9px 18px #806b4520; }
     </style>
 </head>
 <body>
